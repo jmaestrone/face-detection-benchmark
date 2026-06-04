@@ -1,6 +1,6 @@
-# RF-DETR Faces Tests
+# Face Detection Benchmark
 
-Local tooling for building a face-detection dataset from trimmed videos. The pipeline extracts sampled frames, runs a local RF-DETR face checkpoint, exports COCO annotations, and can upload the resulting dataset to Roboflow.
+Local tooling for building and evaluating a target-domain face detection benchmark from trimmed videos. The current pipeline extracts sampled frames, runs a local RF-DETR face checkpoint, exports COCO annotations, and supports Roboflow-based benchmark dataset creation.
 
 ## Setup
 
@@ -30,13 +30,13 @@ notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
 ```
 
-`notebooks/RF_DETR_face_det.ipynb` is the local Mac workflow notebook. The CLI tools are the source of truth for the local pipeline; the notebook is a guided wrapper around those tools.
+`notebooks/RF_DETR_face_det.ipynb` is the local RF-DETR workflow notebook. The CLI tools are the source of truth for the local pipeline; the notebook is a guided wrapper around those tools.
 
 ## Dataset Policy
 
 The cleaned Roboflow dataset created from these target videos is a test-only benchmark. Keep all uploaded images in the Roboflow `test` split, use no augmentations for the benchmark version, and do not train, fine-tune, or tune thresholds on this dataset.
 
-## Planned Pipeline
+## RF-DETR Labeling Pipeline
 
 Extract sampled frames from the current videos:
 

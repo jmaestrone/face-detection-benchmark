@@ -1,7 +1,7 @@
 [project]
-name = "rf-detr-faces-tests"
+name = "face-detection-benchmark"
 version = "0.1.0"
-description = "Local RF-DETR tooling for extracting video frames and exporting face detections to Roboflow."
+description = "Local tooling for building and evaluating target-domain face detection benchmarks."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
