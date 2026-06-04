@@ -16,6 +16,7 @@ from face_detection_benchmark.evaluation_metrics import (
     average_precision,
     f1_score,
     fbeta_score,
+    iou_xyxy,
     match_predictions_at_threshold,
     mean_metric,
     precision,
@@ -39,6 +40,24 @@ DEFAULT_SWEEP_THRESHOLDS = (
     0.01,
     *(round(index * 0.05, 2) for index in range(1, 17)),
 )
+
+__all__ = [
+    "DEFAULT_IOU_THRESHOLDS",
+    "DEFAULT_SWEEP_THRESHOLDS",
+    "DetectionMetrics",
+    "PredictedBox",
+    "PredictionRows",
+    "ThresholdValidationResult",
+    "average_precision",
+    "evaluate_coco_predictions",
+    "evaluate_confidence_thresholds",
+    "iou_xyxy",
+    "match_predictions_at_threshold",
+    "metrics_to_json_dict",
+    "read_prediction_boxes",
+    "read_prediction_rows",
+    "threshold_validation_to_json_dict",
+]
 
 
 def _ground_truth_boxes_by_file_name(

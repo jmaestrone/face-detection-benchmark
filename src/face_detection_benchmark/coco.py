@@ -191,6 +191,7 @@ def xyxy_to_xywh(bbox_xyxy: list[float]) -> list[float]:
 
 
 def _validate_export_inputs(frames_dir: Path, predictions_path: Path) -> None:
+    """Validate source frame and prediction paths before COCO export."""
     if not frames_dir.exists():
         raise ValueError(f"Frames directory does not exist: {frames_dir}")
     if not predictions_path.exists():

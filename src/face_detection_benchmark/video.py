@@ -273,6 +273,7 @@ def _validate_options(
     image_format: str,
     quality: int,
 ) -> None:
+    """Validate frame extraction options before invoking ffmpeg."""
     if fps <= 0:
         raise ValueError("--fps must be greater than 0")
     if every_n_frames is not None and every_n_frames <= 0:
@@ -285,6 +286,7 @@ def _validate_options(
 
 
 def _parse_frame_rate(raw_frame_rate: str | None) -> float:
+    """Parse an ffprobe frame-rate string into frames per second."""
     if not raw_frame_rate:
         return 0.0
     if "/" in raw_frame_rate:
@@ -293,4 +295,5 @@ def _parse_frame_rate(raw_frame_rate: str | None) -> float:
 
 
 def _jpeg_quality_to_qscale(quality: int) -> int:
+    """Convert JPEG quality to ffmpeg qscale value."""
     return max(2, min(31, round(31 - ((quality - 1) * 29 / 99))))

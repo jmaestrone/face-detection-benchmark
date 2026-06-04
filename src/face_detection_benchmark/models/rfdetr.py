@@ -27,6 +27,7 @@ class RfdetrFaceDetector:
     backend = "rfdetr"
 
     def __init__(self, config: RfdetrConfig) -> None:
+        """Initialize the RF-DETR model adapter from configuration."""
         self.config = config
         self.model = self._load_model(config)
 
@@ -51,6 +52,7 @@ class RfdetrFaceDetector:
         }
 
     def _load_model(self, config: RfdetrConfig) -> Any:
+        """Load the configured RF-DETR model implementation."""
         from rfdetr import RFDETRLarge
 
         return RFDETRLarge(
@@ -62,6 +64,7 @@ class RfdetrFaceDetector:
         )
 
     def _detections_to_records(self, prediction: Any) -> list[DetectionRecord]:
+        """Convert one RF-DETR prediction object into detection records."""
         xyxy_values = getattr(prediction, "xyxy", [])
         confidence_values = getattr(prediction, "confidence", None)
         class_id_values = getattr(prediction, "class_id", None)
@@ -82,12 +85,14 @@ class RfdetrFaceDetector:
 
 
 def _optional_float(values: Any, index: int) -> float | None:
+    """Read an optional float value from a vector-like prediction field."""
     if values is None:
         return None
     return round(float(values[index]), 6)
 
 
 def _optional_int(values: Any, index: int) -> int | None:
+    """Read an optional integer value from a vector-like prediction field."""
     if values is None:
         return None
     return int(values[index])
