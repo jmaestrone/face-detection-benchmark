@@ -30,7 +30,11 @@ notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
 ```
 
-`notebooks/RF_DETR_face_det.ipynb` is the original Colab reference notebook. The CLI tools are the source of truth for the local pipeline; the notebook will be updated later to run those tools locally on a Mac.
+`notebooks/RF_DETR_face_det.ipynb` is the local Mac workflow notebook. The CLI tools are the source of truth for the local pipeline; the notebook is a guided wrapper around those tools.
+
+## Dataset Policy
+
+The cleaned Roboflow dataset created from these target videos is a test-only benchmark. Keep all uploaded images in the Roboflow `test` split, use no augmentations for the benchmark version, and do not train, fine-tune, or tune thresholds on this dataset.
 
 ## Planned Pipeline
 
