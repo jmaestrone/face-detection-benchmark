@@ -293,14 +293,19 @@ class EvaluationTest(unittest.TestCase):
                 "# Validation Threshold Metrics",
                 paths["threshold_metrics_markdown_path"].read_text(encoding="utf-8"),
             )
-            self.assertIn(
-                "<svg",
-                paths["precision_recall_path"].read_text(encoding="utf-8"),
+            precision_recall_svg = paths["precision_recall_path"].read_text(
+                encoding="utf-8",
             )
-            self.assertIn(
-                "<svg",
-                paths["f_scores_path"].read_text(encoding="utf-8"),
-            )
+            f_scores_svg = paths["f_scores_path"].read_text(encoding="utf-8")
+            self.assertIn("<svg", precision_recall_svg)
+            self.assertIn("t=0.00-0.50", precision_recall_svg)
+            self.assertIn("selected t=0.50", precision_recall_svg)
+            self.assertIn(">0.95</text>", precision_recall_svg)
+            self.assertIn("<svg", f_scores_svg)
+            self.assertIn("threshold=0.00", f_scores_svg)
+            self.assertIn("threshold=0.50", f_scores_svg)
+            self.assertIn("selected t=0.50", f_scores_svg)
+            self.assertIn(">0.5</text>", f_scores_svg)
 
     def test_append_results_row_writes_header_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
