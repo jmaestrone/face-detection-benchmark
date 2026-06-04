@@ -11,6 +11,9 @@ __pycache__/
 
 # uv / virtual environments
 .venv/
+.env
+.env.*
+!.env.example
 
 # Local model checkpoints and generated artifacts
 /face-trimmed-videos/
@@ -18,6 +21,7 @@ __pycache__/
 /data/frames/
 /data/predictions/
 /data/roboflow-export/
+/data/benchmark/
 /runs/
 
 # Archives and generated media

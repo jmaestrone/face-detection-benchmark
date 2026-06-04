@@ -26,6 +26,7 @@ models/                   # local RF-DETR checkpoints, ignored
 data/frames/              # extracted image frames, ignored
 data/predictions/         # raw RF-DETR detections, ignored
 data/roboflow-export/     # COCO dataset export, ignored
+data/benchmark/           # downloaded benchmark datasets, ignored
 notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
 ```
@@ -35,6 +36,51 @@ runs/                     # previews, logs, and experiments, ignored
 ## Dataset Policy
 
 The cleaned Roboflow dataset created from these target videos is a test-only benchmark. Keep all uploaded images in the Roboflow `test` split, use no augmentations for the benchmark version, and do not train, fine-tune, or tune thresholds on this dataset.
+
+## Benchmark Dataset Download
+
+The canonical cleaned target-domain benchmark should be downloaded from the private Roboflow project version. Keep workspace, project, and API-key values out of committed files.
+
+Copy the example environment file and fill in private values locally:
+
+```bash
+cp .env.example .env
+```
+
+Required `.env` values:
+
+```text
+ROBOFLOW_API_KEY=...
+ROBOFLOW_WORKSPACE=...
+ROBOFLOW_PROJECT=...
+ROBOFLOW_VERSION=1
+```
+
+Do not commit or paste these values into notebooks, docs, or source files. The `.env` file is ignored by git.
+
+Download and validate the benchmark:
+
+```bash
+uv run face-benchmark download-roboflow-benchmark --overwrite
+```
+
+You can also pass the private Roboflow source explicitly instead of using `.env`:
+
+```bash
+uv run face-benchmark download-roboflow-benchmark \
+  --workspace <workspace> \
+  --project <project> \
+  --version <version> \
+  --overwrite
+```
+
+For the current cleaned benchmark, keep the local dataset name as:
+
+```text
+target-video-test-3fps-clean
+```
+
+By default this writes to `data/benchmark/target-video-test-3fps-clean/` and validates that the `test` split contains 169 images, uses category `Human face`, and has no non-empty `train` or `valid` split. It also writes non-secret source metadata to `roboflow_source.json`.
 
 ## RF-DETR Labeling Pipeline
 
@@ -74,7 +120,6 @@ By default this exports only frames that have at least one RF-DETR detection. Us
 Upload the COCO dataset to Roboflow:
 
 ```bash
-export ROBOFLOW_API_KEY=...
 uv run face-benchmark upload-roboflow --workspace <workspace> --project <project-id>
 ```
 
