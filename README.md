@@ -26,8 +26,11 @@ models/                   # local RF-DETR checkpoints, ignored
 data/frames/              # extracted image frames, ignored
 data/predictions/         # raw RF-DETR detections, ignored
 data/roboflow-export/     # COCO dataset export, ignored
+notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
 ```
+
+`notebooks/RF_DETR_face_det.ipynb` is the original Colab reference notebook. The CLI tools are the source of truth for the local pipeline; the notebook will be updated later to run those tools locally on a Mac.
 
 ## Planned Pipeline
 
@@ -39,10 +42,21 @@ uv run rfdetr-faces extract-frames
 
 By default this reads `face-trimmed-videos/`, writes images to `data/frames/`, and samples at `1 fps`. Use `--fps` for a denser or sparser sample, or `--every-n-frames` when you want frame-index based sampling.
 
+For the current 12 trimmed videos, the default `1 fps` extraction produces 61 JPEG frames plus `data/frames/metadata.jsonl`.
+
 Run RF-DETR face detection with a local checkpoint:
 
 ```bash
 uv run rfdetr-faces predict-faces --weights models/checkpoint_best_ema.pth
+```
+
+For a quick smoke run on one extracted frame:
+
+```bash
+uv run rfdetr-faces predict-faces \
+  --weights models/checkpoint_best_ema.pth \
+  --limit 1 \
+  --preview-dir runs/previews
 ```
 
 Export detections as COCO ground-truth annotations for Roboflow:

@@ -7,7 +7,15 @@ from typing import Annotated
 
 import typer
 
-from rfdetr_faces.config import DEFAULT_FRAME_FPS, DEFAULT_FRAMES_DIR, DEFAULT_VIDEO_DIR
+from rfdetr_faces.config import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_FRAME_FPS,
+    DEFAULT_FRAMES_DIR,
+    DEFAULT_MODEL_PATH,
+    DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_VIDEO_DIR,
+)
+from rfdetr_faces.inference import predict_faces_from_frames
 from rfdetr_faces.video import extract_video_frames
 
 app = typer.Typer(
@@ -95,9 +103,116 @@ def extract_frames(
 
 
 @app.command()
-def predict_faces() -> None:
+def predict_faces(
+    frames_dir: Annotated[
+        Path,
+        typer.Option(
+            "--frames-dir",
+            help="Directory containing extracted frames and metadata.jsonl.",
+        ),
+    ] = DEFAULT_FRAMES_DIR,
+    metadata_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--metadata-path",
+            help="Frame metadata JSONL path. Defaults to <frames-dir>/metadata.jsonl.",
+        ),
+    ] = None,
+    output_path: Annotated[
+        Path,
+        typer.Option(
+            "--output-path",
+            "-o",
+            help="JSONL path where RF-DETR detections are written.",
+        ),
+    ] = DEFAULT_PREDICTIONS_PATH,
+    weights: Annotated[
+        Path,
+        typer.Option(
+            "--weights",
+            help="Local RF-DETR checkpoint path.",
+        ),
+    ] = DEFAULT_MODEL_PATH,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            min=0.0,
+            max=1.0,
+            help="Confidence threshold for RF-DETR detections.",
+        ),
+    ] = DEFAULT_CONFIDENCE_THRESHOLD,
+    batch_size: Annotated[
+        int,
+        typer.Option(
+            "--batch-size",
+            min=1,
+            help="Number of frames to predict per RF-DETR batch.",
+        ),
+    ] = 4,
+    max_detections: Annotated[
+        int,
+        typer.Option(
+            "--max-detections",
+            min=1,
+            help="Maximum face detections requested from RF-DETR per frame.",
+        ),
+    ] = 40,
+    device: Annotated[
+        str,
+        typer.Option(
+            "--device",
+            help="Device to use: auto, mps, cuda, or cpu.",
+        ),
+    ] = "auto",
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            min=1,
+            help="Only process the first N frames for a smoke run.",
+        ),
+    ] = None,
+    preview_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--preview-dir",
+            help="Optional directory for annotated preview images.",
+        ),
+    ] = None,
+    max_previews: Annotated[
+        int,
+        typer.Option(
+            "--max-previews",
+            min=0,
+            help="Maximum number of preview images to write when --preview-dir is set.",
+        ),
+    ] = 20,
+) -> None:
     """Run RF-DETR face detection on extracted frames."""
-    typer.echo("predict-faces is planned for a later checkpoint.")
+    try:
+        result = predict_faces_from_frames(
+            frames_dir=frames_dir,
+            metadata_path=metadata_path,
+            output_path=output_path,
+            weights_path=weights,
+            threshold=threshold,
+            batch_size=batch_size,
+            max_detections=max_detections,
+            device=device,
+            limit=limit,
+            preview_dir=preview_dir,
+            max_previews=max_previews,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Wrote detections for {result.image_count} frames "
+        f"({result.detection_count} boxes) to {result.output_path}"
+    )
+    if result.preview_count:
+        typer.echo(f"Preview images: {result.preview_count} in {result.preview_dir}")
 
 
 @app.command()

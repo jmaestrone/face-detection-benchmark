@@ -8,6 +8,7 @@ DEFAULT_VIDEO_DIR = Path("face-trimmed-videos")
 DEFAULT_MODEL_PATH = Path("models/checkpoint_best_ema.pth")
 DEFAULT_FRAMES_DIR = Path("data/frames")
 DEFAULT_PREDICTIONS_DIR = Path("data/predictions")
+DEFAULT_PREDICTIONS_PATH = DEFAULT_PREDICTIONS_DIR / "predictions.jsonl"
 DEFAULT_ROBOFLOW_EXPORT_DIR = Path("data/roboflow-export")
 DEFAULT_RUNS_DIR = Path("runs")
 
