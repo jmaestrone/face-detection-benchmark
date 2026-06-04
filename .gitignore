@@ -13,12 +13,12 @@ __pycache__/
 .venv/
 
 # Local model checkpoints and generated artifacts
-face-trimmed-videos/
-models/
-data/frames/
-data/predictions/
-data/roboflow-export/
-runs/
+/face-trimmed-videos/
+/models/
+/data/frames/
+/data/predictions/
+/data/roboflow-export/
+/runs/
 
 # Archives and generated media
 *.zip

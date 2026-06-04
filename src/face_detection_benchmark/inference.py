@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -14,44 +13,14 @@ from face_detection_benchmark.config import (
     DEFAULT_PREDICTIONS_PATH,
     FACE_CATEGORY_NAME,
 )
+from face_detection_benchmark.models.rfdetr import RfdetrConfig, RfdetrFaceDetector
+from face_detection_benchmark.predictions import (
+    DetectionRecord,
+    ImagePredictionRecord,
+    PredictionResult,
+    prediction_record_to_json,
+)
 from face_detection_benchmark.video import METADATA_FILE_NAME, FrameMetadata
-
-
-@dataclass(frozen=True)
-class DetectionRecord:
-    """One RF-DETR face detection serialized for later COCO export."""
-
-    bbox_xyxy: list[float]
-    bbox_xywh: list[float]
-    confidence: float | None
-    class_id: int | None
-    class_name: str
-
-
-@dataclass(frozen=True)
-class ImagePredictionRecord:
-    """Predictions for one extracted frame image."""
-
-    file_name: str
-    image_path: str
-    source_video: str
-    frame_index: int
-    timestamp_seconds: float
-    width: int
-    height: int
-    threshold: float
-    detections: list[DetectionRecord]
-
-
-@dataclass(frozen=True)
-class PredictionResult:
-    """Summary of an RF-DETR prediction run."""
-
-    output_path: Path
-    image_count: int
-    detection_count: int
-    preview_dir: Path | None
-    preview_count: int
 
 
 def predict_faces_from_frames(
@@ -86,10 +55,13 @@ def predict_faces_from_frames(
         raise ValueError(f"No frame records found in {resolved_metadata_path}")
 
     selected_device = select_device(device)
-    model = load_rfdetr_model(
-        weights_path=weights_path,
-        device=selected_device,
-        max_detections=max_detections,
+    detector = RfdetrFaceDetector(
+        RfdetrConfig(
+            weights_path=weights_path,
+            device=selected_device,
+            threshold=threshold,
+            max_detections=max_detections,
+        )
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,32 +75,29 @@ def predict_faces_from_frames(
     with output_path.open("w", encoding="utf-8") as predictions_file:
         for batch in iter_batches(frame_records, batch_size):
             images_rgb, images_bgr, batch_records = load_image_batch(frames_dir, batch)
-            predictions = model.predict(images_rgb, threshold=threshold)
-            if not isinstance(predictions, list):
-                predictions = [predictions]
-            if len(predictions) != len(batch_records):
-                raise ValueError(
-                    "RF-DETR returned a different number of prediction results "
-                    f"({len(predictions)}) than input images ({len(batch_records)})"
-                )
+            batch_detections = detector.predict_batch(images_rgb)
 
-            for frame_record, image_bgr, prediction in zip(
-                batch_records, images_bgr, predictions
+            for frame_record, image_bgr, detections in zip(
+                batch_records, images_bgr, batch_detections
             ):
-                detections = detections_to_records(prediction)
                 image_record = ImagePredictionRecord(
                     file_name=frame_record.file_name,
                     image_path=(frames_dir / frame_record.output_path).as_posix(),
+                    width=frame_record.width,
+                    height=frame_record.height,
+                    detections=detections,
+                    model_name=detector.model_name,
+                    model_config=detector.metadata(),
                     source_video=frame_record.source_video,
                     frame_index=frame_record.frame_index,
                     timestamp_seconds=frame_record.timestamp_seconds,
-                    width=frame_record.width,
-                    height=frame_record.height,
                     threshold=threshold,
-                    detections=detections,
+                    device=selected_device,
+                    backend=detector.backend,
                 )
                 predictions_file.write(
-                    json.dumps(_as_json_dict(image_record), sort_keys=True) + "\n"
+                    json.dumps(prediction_record_to_json(image_record), sort_keys=True)
+                    + "\n"
                 )
                 image_count += 1
                 detection_count += len(detections)
@@ -214,44 +183,6 @@ def select_device(requested_device: str) -> str:
     return "cpu"
 
 
-def load_rfdetr_model(
-    weights_path: Path,
-    device: str,
-    max_detections: int,
-) -> Any:
-    """Load the local RF-DETR Large model checkpoint."""
-    from rfdetr import RFDETRLarge
-
-    return RFDETRLarge(
-        pretrain_weights=str(weights_path),
-        device=device,
-        num_classes=2,
-        num_queries=max_detections,
-        num_select=max_detections,
-    )
-
-
-def detections_to_records(prediction: Any) -> list[DetectionRecord]:
-    """Convert a supervision-style detection object into serializable records."""
-    xyxy_values = getattr(prediction, "xyxy", [])
-    confidence_values = getattr(prediction, "confidence", None)
-    class_id_values = getattr(prediction, "class_id", None)
-
-    records: list[DetectionRecord] = []
-    for index, xyxy in enumerate(xyxy_values):
-        bbox_xyxy = [round(float(value), 4) for value in xyxy]
-        records.append(
-            DetectionRecord(
-                bbox_xyxy=bbox_xyxy,
-                bbox_xywh=_xyxy_to_xywh(bbox_xyxy),
-                confidence=_optional_float(confidence_values, index),
-                class_id=_optional_int(class_id_values, index),
-                class_name=FACE_CATEGORY_NAME,
-            )
-        )
-    return records
-
-
 def write_preview_image(
     image_bgr: Any,
     detections: list[DetectionRecord],
@@ -310,32 +241,3 @@ def _validate_prediction_options(
         raise ValueError("--limit must be greater than 0")
     if max_previews < 0:
         raise ValueError("--max-previews must be greater than or equal to 0")
-
-
-def _xyxy_to_xywh(bbox_xyxy: list[float]) -> list[float]:
-    x1, y1, x2, y2 = bbox_xyxy
-    return [
-        round(x1, 4),
-        round(y1, 4),
-        round(max(0.0, x2 - x1), 4),
-        round(max(0.0, y2 - y1), 4),
-    ]
-
-
-def _optional_float(values: Any, index: int) -> float | None:
-    if values is None:
-        return None
-    return round(float(values[index]), 6)
-
-
-def _optional_int(values: Any, index: int) -> int | None:
-    if values is None:
-        return None
-    return int(values[index])
-
-
-def _as_json_dict(record: ImagePredictionRecord) -> dict[str, Any]:
-    return {
-        **asdict(record),
-        "detections": [asdict(detection) for detection in record.detections],
-    }

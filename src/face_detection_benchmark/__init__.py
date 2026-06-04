@@ -1,4 +1,4 @@
-"""Local RF-DETR face dataset tooling."""
+"""Local face detection benchmark tooling."""
 
 __all__ = ["__version__"]
 
