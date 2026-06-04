@@ -30,9 +30,18 @@ from face_detection_benchmark.env import get_env_value
 from face_detection_benchmark.evaluation import (
     DEFAULT_SWEEP_THRESHOLDS,
     evaluate_coco_predictions,
+    evaluate_confidence_thresholds,
 )
-from face_detection_benchmark.inference import predict_faces_from_frames
-from face_detection_benchmark.reports import write_evaluation_reports
+from face_detection_benchmark.inference import (
+    DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
+    predict_faces_from_coco_dataset,
+    predict_faces_from_frames,
+    rfdetr_model_name_from_weights,
+)
+from face_detection_benchmark.reports import (
+    write_evaluation_reports,
+    write_threshold_validation_reports,
+)
 from face_detection_benchmark.video import extract_video_frames
 
 app = typer.Typer(
@@ -226,6 +235,140 @@ def predict_faces(
 
     typer.echo(
         f"Wrote detections for {result.image_count} frames "
+        f"({result.detection_count} boxes) to {result.output_path}"
+    )
+    if result.preview_count:
+        typer.echo(f"Preview images: {result.preview_count} in {result.preview_dir}")
+
+
+@app.command()
+def predict_rfdetr_benchmark(
+    dataset_dir: Annotated[
+        Path,
+        typer.Option(
+            "--dataset-dir",
+            help="COCO benchmark split directory containing _annotations.coco.json.",
+        ),
+    ] = DEFAULT_BENCHMARK_DATA_DIR
+    / DEFAULT_BENCHMARK_DATASET_NAME
+    / DEFAULT_ROBOFLOW_TEST_SPLIT,
+    output_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-path",
+            "-o",
+            help=(
+                "JSONL output path. Defaults to "
+                "runs/benchmarks/<run-id>/predictions/<model>.jsonl."
+            ),
+        ),
+    ] = None,
+    weights: Annotated[
+        Path,
+        typer.Option(
+            "--weights",
+            help="Local RF-DETR checkpoint path.",
+        ),
+    ] = DEFAULT_MODEL_PATH,
+    model_name: Annotated[
+        str | None,
+        typer.Option(
+            "--model-name",
+            help="Model name written into prediction rows.",
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-path is not supplied.",
+        ),
+    ] = None,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            min=0.0,
+            max=1.0,
+            help="Low RF-DETR inference threshold used before validation sweeps.",
+        ),
+    ] = DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
+    batch_size: Annotated[
+        int,
+        typer.Option(
+            "--batch-size",
+            min=1,
+            help="Number of images to predict per RF-DETR batch.",
+        ),
+    ] = 4,
+    max_detections: Annotated[
+        int,
+        typer.Option(
+            "--max-detections",
+            min=1,
+            help="Maximum face detections requested from RF-DETR per image.",
+        ),
+    ] = 40,
+    device: Annotated[
+        str,
+        typer.Option(
+            "--device",
+            help="Device to use: auto, mps, cuda, or cpu.",
+        ),
+    ] = "auto",
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            min=1,
+            help="Only process the first N images for a smoke run.",
+        ),
+    ] = None,
+    preview_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--preview-dir",
+            help="Optional directory for annotated preview images.",
+        ),
+    ] = None,
+    max_previews: Annotated[
+        int,
+        typer.Option(
+            "--max-previews",
+            min=0,
+            help="Maximum number of preview images to write when --preview-dir is set.",
+        ),
+    ] = 20,
+) -> None:
+    """Run RF-DETR on the local COCO benchmark split."""
+    try:
+        resolved_model_name = model_name or rfdetr_model_name_from_weights(weights)
+        resolved_run_id = run_id or _default_run_id()
+        resolved_output_path = output_path or (
+            DEFAULT_RUNS_DIR
+            / "benchmarks"
+            / resolved_run_id
+            / "predictions"
+            / f"{resolved_model_name}.jsonl"
+        )
+        result = predict_faces_from_coco_dataset(
+            dataset_dir=dataset_dir,
+            output_path=resolved_output_path,
+            weights_path=weights,
+            threshold=threshold,
+            batch_size=batch_size,
+            max_detections=max_detections,
+            device=device,
+            limit=limit,
+            preview_dir=preview_dir,
+            max_previews=max_previews,
+            model_name=resolved_model_name,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Wrote detections for {result.image_count} benchmark images "
         f"({result.detection_count} boxes) to {result.output_path}"
     )
     if result.preview_count:
@@ -541,6 +684,118 @@ def evaluate_detections(
 
 
 @app.command()
+def validate_thresholds(
+    predictions_path: Annotated[
+        Path,
+        typer.Option(
+            "--predictions-path",
+            help="Normalized prediction JSONL to evaluate across thresholds.",
+        ),
+    ],
+    dataset_dir: Annotated[
+        Path,
+        typer.Option(
+            "--dataset-dir",
+            help="COCO validation split directory containing _annotations.coco.json.",
+        ),
+    ] = DEFAULT_BENCHMARK_DATA_DIR
+    / DEFAULT_BENCHMARK_DATASET_NAME
+    / DEFAULT_ROBOFLOW_TEST_SPLIT,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Validation output directory. Defaults to runs/validation/<run-id>.",
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    category_name: Annotated[
+        str,
+        typer.Option(
+            "--category",
+            help="COCO category name to evaluate.",
+        ),
+    ] = FACE_CATEGORY_NAME,
+    iou_threshold: Annotated[
+        float,
+        typer.Option(
+            "--iou-threshold",
+            min=0.0,
+            max=1.0,
+            help="IoU threshold for precision/recall/F-score validation.",
+        ),
+    ] = 0.5,
+    selection_metric: Annotated[
+        str,
+        typer.Option(
+            "--selection-metric",
+            help="Metric used to select the threshold: precision, recall, f1, or f2.",
+        ),
+    ] = "f2",
+    thresholds: Annotated[
+        str | None,
+        typer.Option(
+            "--thresholds",
+            help="Comma-separated thresholds. Defaults to 0.005,0.01,0.05,...,0.80.",
+        ),
+    ] = None,
+) -> None:
+    """Treat a labeled split as validation and choose a confidence threshold."""
+    try:
+        threshold_values = (
+            _parse_thresholds(thresholds)
+            if thresholds is not None
+            else DEFAULT_SWEEP_THRESHOLDS
+        )
+        result = evaluate_confidence_thresholds(
+            dataset_dir=dataset_dir,
+            predictions_path=predictions_path,
+            category_name=category_name,
+            iou_threshold=iou_threshold,
+            thresholds=threshold_values,
+            selection_metric=selection_metric,
+        )
+        resolved_run_id = run_id or _default_run_id()
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "validation" / resolved_run_id
+        )
+        report_paths = write_threshold_validation_reports(
+            result=result,
+            output_dir=resolved_output_dir,
+            dataset_dir=dataset_dir,
+            predictions_path=predictions_path,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Validated {len(result.threshold_metrics)} thresholds for "
+        f"{result.model_name} against {result.ground_truth_count} {category_name} boxes"
+    )
+    typer.echo(
+        f"selected_threshold={result.selected_threshold:.4f} "
+        f"selection_metric={result.selection_metric} "
+        f"precision={float(result.selected_metrics['precision']):.4f} "
+        f"recall={float(result.selected_metrics['recall']):.4f} "
+        f"f1={float(result.selected_metrics['f1']):.4f} "
+        f"f2={float(result.selected_metrics['f2']):.4f}"
+    )
+    typer.echo(f"Validation JSON: {report_paths['validation_path']}")
+    typer.echo(f"Selected threshold JSON: {report_paths['selected_threshold_path']}")
+    typer.echo(f"Threshold CSV: {report_paths['threshold_metrics_path']}")
+    typer.echo(f"Threshold Markdown: {report_paths['threshold_metrics_markdown_path']}")
+    typer.echo(f"Precision-recall plot: {report_paths['precision_recall_path']}")
+    typer.echo(f"F-score plot: {report_paths['f_scores_path']}")
+
+
+@app.command()
 def upload_roboflow() -> None:
     """Upload the exported COCO dataset to Roboflow."""
     typer.echo("upload-roboflow is planned for a later checkpoint.")
@@ -558,3 +813,13 @@ def _optional_int_env(name: str) -> int | None:
 
 def _default_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _parse_thresholds(value: str) -> tuple[float, ...]:
+    parts = [part.strip() for part in value.split(",")]
+    if not parts or any(not part for part in parts):
+        raise ValueError("--thresholds must be a comma-separated list of numbers")
+    try:
+        return tuple(float(part) for part in parts)
+    except ValueError as error:
+        raise ValueError("--thresholds must contain only numbers") from error

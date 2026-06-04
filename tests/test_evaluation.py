@@ -8,19 +8,29 @@ import unittest
 from pathlib import Path
 
 from face_detection_benchmark.evaluation import (
+    DEFAULT_SWEEP_THRESHOLDS,
     PredictedBox,
     average_precision,
     evaluate_coco_predictions,
+    evaluate_confidence_thresholds,
     iou_xyxy,
     match_predictions_at_threshold,
 )
+from face_detection_benchmark.inference import rfdetr_model_name_from_weights
 from face_detection_benchmark.reports import (
     append_results_row,
     write_results_leaderboard,
+    write_threshold_validation_reports,
 )
 
 
 class EvaluationTest(unittest.TestCase):
+    def test_rfdetr_model_name_from_weights(self) -> None:
+        self.assertEqual(
+            rfdetr_model_name_from_weights(Path("models/checkpoint_best_ema_2.pth")),
+            "rfdetr-checkpoint-best-ema-2",
+        )
+
     def test_iou_xyxy(self) -> None:
         self.assertEqual(iou_xyxy([0, 0, 10, 10], [20, 20, 30, 30]), 0.0)
         self.assertAlmostEqual(
@@ -176,6 +186,121 @@ class EvaluationTest(unittest.TestCase):
 
             self.assertEqual(metrics.prediction_count, 0)
             self.assertEqual(metrics.false_negative_count, 1)
+
+    def test_evaluate_confidence_thresholds_selects_best_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_dir, predictions_path = write_coco_fixture(
+                root=Path(temp_dir),
+                prediction_file_name="image.jpg",
+                detections=[
+                    {
+                        "bbox_xyxy": [0, 0, 10, 10],
+                        "bbox_xywh": [0, 0, 10, 10],
+                        "confidence": 0.9,
+                        "class_id": 1,
+                        "class_name": "Human face",
+                    },
+                    {
+                        "bbox_xyxy": [50, 50, 60, 60],
+                        "bbox_xywh": [50, 50, 10, 10],
+                        "confidence": 0.3,
+                        "class_id": 1,
+                        "class_name": "Human face",
+                    },
+                ],
+            )
+
+            result = evaluate_confidence_thresholds(
+                dataset_dir=dataset_dir,
+                predictions_path=predictions_path,
+                thresholds=(0.0, 0.5),
+                selection_metric="f2",
+            )
+
+            self.assertEqual(result.selected_threshold, 0.5)
+            self.assertEqual(result.selected_metrics["precision"], 1.0)
+            self.assertEqual(result.selected_metrics["recall"], 1.0)
+
+    def test_evaluate_confidence_thresholds_uses_nonzero_default_thresholds(
+        self,
+    ) -> None:
+        self.assertNotIn(0.0, DEFAULT_SWEEP_THRESHOLDS)
+        self.assertIn(0.005, DEFAULT_SWEEP_THRESHOLDS)
+        self.assertIn(0.01, DEFAULT_SWEEP_THRESHOLDS)
+        self.assertEqual(max(DEFAULT_SWEEP_THRESHOLDS), 0.8)
+
+    def test_evaluate_confidence_thresholds_ties_choose_higher_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_dir, predictions_path = write_coco_fixture(
+                root=Path(temp_dir),
+                prediction_file_name="image.jpg",
+                detections=[
+                    {
+                        "bbox_xyxy": [0, 0, 10, 10],
+                        "bbox_xywh": [0, 0, 10, 10],
+                        "confidence": 0.9,
+                        "class_id": 1,
+                        "class_name": "Human face",
+                    }
+                ],
+            )
+
+            result = evaluate_confidence_thresholds(
+                dataset_dir=dataset_dir,
+                predictions_path=predictions_path,
+                thresholds=(0.005, 0.01, 0.5),
+                selection_metric="f2",
+            )
+
+            self.assertEqual(result.selected_threshold, 0.5)
+
+    def test_write_threshold_validation_reports_writes_tables_and_plots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset_dir, predictions_path = write_coco_fixture(
+                root=root,
+                prediction_file_name="image.jpg",
+                detections=[
+                    {
+                        "bbox_xyxy": [0, 0, 10, 10],
+                        "bbox_xywh": [0, 0, 10, 10],
+                        "confidence": 0.9,
+                        "class_id": 1,
+                        "class_name": "Human face",
+                    }
+                ],
+            )
+            result = evaluate_confidence_thresholds(
+                dataset_dir=dataset_dir,
+                predictions_path=predictions_path,
+                thresholds=(0.0, 0.5),
+            )
+
+            paths = write_threshold_validation_reports(
+                result=result,
+                output_dir=root / "validation",
+                dataset_dir=dataset_dir,
+                predictions_path=predictions_path,
+            )
+
+            self.assertTrue(paths["validation_path"].exists())
+            self.assertTrue(paths["selected_threshold_path"].exists())
+            self.assertIn(
+                "confidence_threshold",
+                paths["threshold_metrics_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "# Validation Threshold Metrics",
+                paths["threshold_metrics_markdown_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "<svg",
+                paths["precision_recall_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "<svg",
+                paths["f_scores_path"].read_text(encoding="utf-8"),
+            )
 
     def test_append_results_row_writes_header_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

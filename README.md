@@ -96,6 +96,37 @@ By default this reads `data/benchmark/target-video-test-3fps-clean/test/`, write
 
 Choose `--confidence-threshold` before evaluating the benchmark. Do not run multiple thresholds on the test set to choose the best one. A diagnostic confidence sweep is available with `--include-confidence-sweep`, but it should not be used for threshold selection on this test-only dataset.
 
+## Threshold Validation
+
+Generate RF-DETR predictions directly on the cleaned COCO split before validation:
+
+```bash
+uv run face-benchmark predict-rfdetr-benchmark \
+  --weights models/checkpoint_best_ema.pth \
+  --run-id rfdetr-ema-1
+```
+
+This command defaults to a low inference threshold of `0.005` so validation sweeps can compare operating thresholds without being limited by an earlier `0.25` prediction filter.
+
+If you intentionally treat a labeled split as validation data, choose an operating threshold with:
+
+```bash
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/<run-id>/predictions/<model>.jsonl \
+  --selection-metric f2
+```
+
+By default this reads the same local COCO split path as benchmark evaluation, evaluates thresholds `0.005`, `0.01`, and `0.05` through `0.80` in `0.05` steps at IoU `0.50`, and writes validation-only artifacts under `runs/validation/<new-run-id>/`:
+
+- `threshold_validation.json`
+- `selected_threshold.json`
+- `threshold_metrics.csv`
+- `threshold_metrics.md`
+- `precision_recall.svg`
+- `f1_f2_by_threshold.svg`
+
+Use `--selection-metric f1`, `--selection-metric f2`, `--selection-metric precision`, or `--selection-metric recall` to decide how the selected threshold is chosen. If multiple thresholds have the same selected metric value, the higher threshold is selected. Use `--thresholds 0.10,0.20,0.30` to provide a custom threshold grid. If this cleaned target-domain dataset is used to choose a threshold, treat the output as validation analysis rather than an unbiased test benchmark result.
+
 ## RF-DETR Labeling Pipeline
 
 Extract sampled frames from the current videos:

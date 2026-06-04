@@ -14,7 +14,11 @@ from face_detection_benchmark.datasets import (
 )
 
 DEFAULT_IOU_THRESHOLDS = tuple(round(0.5 + index * 0.05, 2) for index in range(10))
-DEFAULT_SWEEP_THRESHOLDS = tuple(round(index * 0.05, 2) for index in range(21))
+DEFAULT_SWEEP_THRESHOLDS = (
+    0.005,
+    0.01,
+    *(round(index * 0.05, 2) for index in range(1, 17)),
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,31 @@ class DetectionMetrics:
     confidence_sweep: list[dict[str, float | int]]
 
 
+@dataclass(frozen=True)
+class ThresholdValidationResult:
+    """Threshold sweep metrics and selected operating point for validation."""
+
+    model_name: str
+    image_count: int
+    ground_truth_count: int
+    prediction_count: int
+    iou_threshold: float
+    selection_metric: str
+    selected_threshold: float
+    selected_metrics: dict[str, float | int]
+    threshold_metrics: list[dict[str, float | int]]
+
+
+@dataclass(frozen=True)
+class EvaluationInputs:
+    """Shared normalized inputs for detection evaluation helpers."""
+
+    dataset: CocoDetectionDataset
+    ground_truth_by_file_name: dict[str, list[list[float]]]
+    predictions: list[PredictedBox]
+    model_name: str
+
+
 def evaluate_coco_predictions(
     dataset_dir: Path,
     predictions_path: Path,
@@ -78,38 +107,15 @@ def evaluate_coco_predictions(
     sweep_thresholds: Iterable[float] | None = None,
 ) -> DetectionMetrics:
     """Evaluate normalized prediction JSONL against a COCO detection dataset."""
-    if not predictions_path.exists():
-        raise ValueError(f"Predictions file does not exist: {predictions_path}")
-
-    dataset = load_coco_detection_dataset(dataset_dir)
-    category_ids = {
-        int(category["id"])
-        for category in dataset.categories
-        if str(category.get("name")) == category_name
-    }
-    if not category_ids:
-        raise ValueError(f"Category {category_name!r} not found in {dataset_dir}")
-
-    ground_truth_by_file_name = _ground_truth_boxes_by_file_name(dataset, category_ids)
-    prediction_rows = read_prediction_rows(predictions_path)
-    image_file_names = {image.file_name for image in dataset.images}
-    overlapping_file_names = prediction_rows.file_names & image_file_names
-    if prediction_rows.file_names and not overlapping_file_names:
-        raise ValueError(
-            "Prediction file has no image filenames matching the COCO dataset. "
-            "Run predictions on this benchmark split or remap filenames before "
-            "evaluation."
-        )
-    relevant_predictions = [
-        prediction
-        for prediction in prediction_rows.boxes
-        if prediction.file_name in image_file_names
-    ]
-    model_name = _model_name_for_predictions(relevant_predictions, predictions_path)
+    inputs = _load_evaluation_inputs(
+        dataset_dir=dataset_dir,
+        predictions_path=predictions_path,
+        category_name=category_name,
+    )
 
     counts = match_predictions_at_threshold(
-        ground_truth_by_file_name=ground_truth_by_file_name,
-        predictions=relevant_predictions,
+        ground_truth_by_file_name=inputs.ground_truth_by_file_name,
+        predictions=inputs.predictions,
         confidence_threshold=confidence_threshold,
         iou_threshold=iou_threshold,
     )
@@ -118,8 +124,8 @@ def evaluate_coco_predictions(
 
     ap_by_iou = {
         f"{threshold:.2f}": average_precision(
-            ground_truth_by_file_name=ground_truth_by_file_name,
-            predictions=relevant_predictions,
+            ground_truth_by_file_name=inputs.ground_truth_by_file_name,
+            predictions=inputs.predictions,
             iou_threshold=threshold,
         )
         for threshold in iou_thresholds
@@ -130,8 +136,8 @@ def evaluate_coco_predictions(
             _sweep_row(
                 threshold=threshold,
                 counts=match_predictions_at_threshold(
-                    ground_truth_by_file_name=ground_truth_by_file_name,
-                    predictions=relevant_predictions,
+                    ground_truth_by_file_name=inputs.ground_truth_by_file_name,
+                    predictions=inputs.predictions,
                     confidence_threshold=threshold,
                     iou_threshold=iou_threshold,
                 ),
@@ -140,12 +146,12 @@ def evaluate_coco_predictions(
         ]
 
     return DetectionMetrics(
-        model_name=model_name,
-        image_count=len(dataset.images),
+        model_name=inputs.model_name,
+        image_count=len(inputs.dataset.images),
         ground_truth_count=sum(
-            len(boxes) for boxes in ground_truth_by_file_name.values()
+            len(boxes) for boxes in inputs.ground_truth_by_file_name.values()
         ),
-        prediction_count=len(relevant_predictions),
+        prediction_count=len(inputs.predictions),
         confidence_threshold=confidence_threshold,
         iou_threshold=iou_threshold,
         true_positive_count=counts.true_positive_count,
@@ -160,6 +166,64 @@ def evaluate_coco_predictions(
         map_50_95=_mean(ap_by_iou.values()),
         ap_by_iou=ap_by_iou,
         confidence_sweep=confidence_sweep,
+    )
+
+
+def evaluate_confidence_thresholds(
+    dataset_dir: Path,
+    predictions_path: Path,
+    category_name: str = FACE_CATEGORY_NAME,
+    iou_threshold: float = 0.5,
+    thresholds: Iterable[float] = DEFAULT_SWEEP_THRESHOLDS,
+    selection_metric: str = "f2",
+) -> ThresholdValidationResult:
+    """Evaluate many confidence thresholds and select one validation threshold."""
+    if selection_metric not in {"precision", "recall", "f1", "f2"}:
+        raise ValueError(
+            "--selection-metric must be one of precision, recall, f1, or f2"
+        )
+
+    threshold_values = [float(threshold) for threshold in thresholds]
+    if not threshold_values:
+        raise ValueError("At least one threshold is required")
+    for threshold in threshold_values:
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("Threshold values must be between 0 and 1")
+
+    inputs = _load_evaluation_inputs(
+        dataset_dir=dataset_dir,
+        predictions_path=predictions_path,
+        category_name=category_name,
+    )
+    threshold_metrics = [
+        _sweep_row(
+            threshold=threshold,
+            counts=match_predictions_at_threshold(
+                ground_truth_by_file_name=inputs.ground_truth_by_file_name,
+                predictions=inputs.predictions,
+                confidence_threshold=threshold,
+                iou_threshold=iou_threshold,
+            ),
+        )
+        for threshold in threshold_values
+    ]
+    selected_metrics = _select_threshold_metrics(
+        threshold_metrics=threshold_metrics,
+        selection_metric=selection_metric,
+    )
+
+    return ThresholdValidationResult(
+        model_name=inputs.model_name,
+        image_count=len(inputs.dataset.images),
+        ground_truth_count=sum(
+            len(boxes) for boxes in inputs.ground_truth_by_file_name.values()
+        ),
+        prediction_count=len(inputs.predictions),
+        iou_threshold=iou_threshold,
+        selection_metric=selection_metric,
+        selected_threshold=float(selected_metrics["confidence_threshold"]),
+        selected_metrics=selected_metrics,
+        threshold_metrics=threshold_metrics,
     )
 
 
@@ -323,6 +387,53 @@ def metrics_to_json_dict(metrics: DetectionMetrics) -> dict[str, Any]:
     return asdict(metrics)
 
 
+def threshold_validation_to_json_dict(
+    result: ThresholdValidationResult,
+) -> dict[str, Any]:
+    """Convert threshold validation output to a JSON-serializable dictionary."""
+    return asdict(result)
+
+
+def _load_evaluation_inputs(
+    dataset_dir: Path,
+    predictions_path: Path,
+    category_name: str,
+) -> EvaluationInputs:
+    if not predictions_path.exists():
+        raise ValueError(f"Predictions file does not exist: {predictions_path}")
+
+    dataset = load_coco_detection_dataset(dataset_dir)
+    category_ids = {
+        int(category["id"])
+        for category in dataset.categories
+        if str(category.get("name")) == category_name
+    }
+    if not category_ids:
+        raise ValueError(f"Category {category_name!r} not found in {dataset_dir}")
+
+    ground_truth_by_file_name = _ground_truth_boxes_by_file_name(dataset, category_ids)
+    prediction_rows = read_prediction_rows(predictions_path)
+    image_file_names = {image.file_name for image in dataset.images}
+    overlapping_file_names = prediction_rows.file_names & image_file_names
+    if prediction_rows.file_names and not overlapping_file_names:
+        raise ValueError(
+            "Prediction file has no image filenames matching the COCO dataset. "
+            "Run predictions on this benchmark split or remap filenames before "
+            "evaluation."
+        )
+    relevant_predictions = [
+        prediction
+        for prediction in prediction_rows.boxes
+        if prediction.file_name in image_file_names
+    ]
+    return EvaluationInputs(
+        dataset=dataset,
+        ground_truth_by_file_name=ground_truth_by_file_name,
+        predictions=relevant_predictions,
+        model_name=_model_name_for_predictions(relevant_predictions, predictions_path),
+    )
+
+
 def _ground_truth_boxes_by_file_name(
     dataset: CocoDetectionDataset,
     category_ids: set[int],
@@ -373,6 +484,19 @@ def _sweep_row(
         "f1": _f1(precision, recall),
         "f2": _fbeta(precision, recall, beta=2.0),
     }
+
+
+def _select_threshold_metrics(
+    threshold_metrics: list[dict[str, float | int]],
+    selection_metric: str,
+) -> dict[str, float | int]:
+    return max(
+        threshold_metrics,
+        key=lambda row: (
+            float(row[selection_metric]),
+            float(row["confidence_threshold"]),
+        ),
+    )
 
 
 def _model_name_for_predictions(
