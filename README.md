@@ -1,12 +1,6 @@
 # RF-DETR Faces Tests
 
-Local tooling for building a face-detection dataset from trimmed videos. The
-pipeline extracts sampled frames, runs a local RF-DETR face checkpoint, exports
-COCO annotations, and can upload the resulting dataset to Roboflow.
-
-The current notebook, `RF_DETR_face_det.ipynb`, is a reference from the Colab
-workflow. The local scripts should become the source of truth, with the notebook
-kept as an exploratory wrapper around those scripts.
+Local tooling for building a face-detection dataset from trimmed videos. The pipeline extracts sampled frames, runs a local RF-DETR face checkpoint, exports COCO annotations, and can upload the resulting dataset to Roboflow.
 
 ## Setup
 
@@ -16,8 +10,7 @@ This repo uses `uv` and Python 3.12.
 uv sync
 ```
 
-RF-DETR inference requires a local checkpoint. Put model files under `models/`;
-for example:
+RF-DETR inference requires a local checkpoint. Put model files under `models/`; for example:
 
 ```text
 models/checkpoint_best_ema.pth
@@ -44,6 +37,8 @@ Extract sampled frames from the current videos:
 uv run rfdetr-faces extract-frames
 ```
 
+By default this reads `face-trimmed-videos/`, writes images to `data/frames/`, and samples at `1 fps`. Use `--fps` for a denser or sparser sample, or `--every-n-frames` when you want frame-index based sampling.
+
 Run RF-DETR face detection with a local checkpoint:
 
 ```bash
@@ -63,5 +58,4 @@ export ROBOFLOW_API_KEY=...
 uv run rfdetr-faces upload-roboflow --workspace <workspace> --project <project-id>
 ```
 
-The exported RF-DETR detections are treated as ground truth for upload. Any noisy
-or missing boxes should be corrected later in Roboflow.
+The exported RF-DETR detections are treated as ground truth for upload. Any noisy or missing boxes should be corrected later in Roboflow.

@@ -13,6 +13,7 @@ __pycache__/
 .venv/
 
 # Local model checkpoints and generated artifacts
+face-trimmed-videos/
 models/
 data/frames/
 data/predictions/
