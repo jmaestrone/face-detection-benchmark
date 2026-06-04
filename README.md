@@ -82,6 +82,20 @@ target-video-test-3fps-clean
 
 By default this writes to `data/benchmark/target-video-test-3fps-clean/` and validates that the `test` split contains 169 images, uses category `Human face`, and has no non-empty `train` or `valid` split. It also writes non-secret source metadata to `roboflow_source.json`.
 
+## Benchmark Evaluation
+
+Evaluate normalized prediction JSONL files against the cleaned COCO test split:
+
+```bash
+uv run face-benchmark evaluate-detections \
+  --predictions-path runs/benchmarks/<run-id>/predictions/<model>.jsonl \
+  --confidence-threshold <preselected-threshold>
+```
+
+By default this reads `data/benchmark/target-video-test-3fps-clean/test/`, writes metrics under `runs/benchmarks/<new-run-id>/`, appends one row to the ignored local comparison table at `runs/benchmarks/results.csv`, and regenerates a human-readable Markdown leaderboard at `runs/benchmarks/results.md`. Prediction rows must use `file_name` values that match the COCO test split image filenames. The evaluator reports precision, recall, F1, F2 at IoU 0.50, `AP50`, `AP75`, and `mAP@[0.50:0.95]`.
+
+Choose `--confidence-threshold` before evaluating the benchmark. Do not run multiple thresholds on the test set to choose the best one. A diagnostic confidence sweep is available with `--include-confidence-sweep`, but it should not be used for threshold selection on this test-only dataset.
+
 ## RF-DETR Labeling Pipeline
 
 Extract sampled frames from the current videos:

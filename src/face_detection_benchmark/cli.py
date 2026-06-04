@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -20,12 +21,18 @@ from face_detection_benchmark.config import (
     DEFAULT_ROBOFLOW_EXPORT_DIR,
     DEFAULT_ROBOFLOW_FORMAT,
     DEFAULT_ROBOFLOW_TEST_SPLIT,
+    DEFAULT_RUNS_DIR,
     DEFAULT_VIDEO_DIR,
     FACE_CATEGORY_NAME,
 )
 from face_detection_benchmark.datasets import download_roboflow_benchmark_dataset
 from face_detection_benchmark.env import get_env_value
+from face_detection_benchmark.evaluation import (
+    DEFAULT_SWEEP_THRESHOLDS,
+    evaluate_coco_predictions,
+)
 from face_detection_benchmark.inference import predict_faces_from_frames
+from face_detection_benchmark.reports import write_evaluation_reports
 from face_detection_benchmark.video import extract_video_frames
 
 app = typer.Typer(
@@ -400,6 +407,140 @@ def download_roboflow_benchmark(
 
 
 @app.command()
+def evaluate_detections(
+    predictions_path: Annotated[
+        Path,
+        typer.Option(
+            "--predictions-path",
+            help="Normalized prediction JSONL to evaluate.",
+        ),
+    ],
+    dataset_dir: Annotated[
+        Path,
+        typer.Option(
+            "--dataset-dir",
+            help="COCO split directory containing _annotations.coco.json.",
+        ),
+    ] = DEFAULT_BENCHMARK_DATA_DIR
+    / DEFAULT_BENCHMARK_DATASET_NAME
+    / DEFAULT_ROBOFLOW_TEST_SPLIT,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Benchmark run output directory. Defaults to runs/benchmarks/<run-id>.",
+        ),
+    ] = None,
+    results_table_path: Annotated[
+        Path,
+        typer.Option(
+            "--results-table",
+            help="Cumulative local CSV table appended after each evaluation.",
+        ),
+    ] = DEFAULT_RUNS_DIR / "benchmarks" / "results.csv",
+    leaderboard_path: Annotated[
+        Path,
+        typer.Option(
+            "--leaderboard",
+            help="Human-readable Markdown leaderboard generated from the results table.",
+        ),
+    ] = DEFAULT_RUNS_DIR / "benchmarks" / "results.md",
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    category_name: Annotated[
+        str,
+        typer.Option(
+            "--category",
+            help="COCO category name to evaluate.",
+        ),
+    ] = FACE_CATEGORY_NAME,
+    confidence_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--confidence-threshold",
+            min=0.0,
+            max=1.0,
+            help="Required preselected confidence threshold for precision/recall/F1/F2.",
+        ),
+    ] = None,
+    iou_threshold: Annotated[
+        float,
+        typer.Option(
+            "--iou-threshold",
+            min=0.0,
+            max=1.0,
+            help="IoU threshold for primary precision/recall/F1.",
+        ),
+    ] = 0.5,
+    include_confidence_sweep: Annotated[
+        bool,
+        typer.Option(
+            "--include-confidence-sweep",
+            help=(
+                "Write diagnostic confidence sweep output. Do not use this to "
+                "choose thresholds on the benchmark test set."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Evaluate normalized detections against a COCO benchmark split."""
+    try:
+        if confidence_threshold is None:
+            raise ValueError(
+                "--confidence-threshold is required; choose it before evaluating "
+                "the benchmark"
+            )
+        metrics = evaluate_coco_predictions(
+            dataset_dir=dataset_dir,
+            predictions_path=predictions_path,
+            category_name=category_name,
+            confidence_threshold=confidence_threshold,
+            iou_threshold=iou_threshold,
+            sweep_thresholds=(
+                DEFAULT_SWEEP_THRESHOLDS if include_confidence_sweep else None
+            ),
+        )
+        resolved_run_id = run_id or _default_run_id()
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "benchmarks" / resolved_run_id
+        )
+        report_paths = write_evaluation_reports(
+            metrics,
+            resolved_output_dir,
+            results_table_path=results_table_path,
+            leaderboard_path=leaderboard_path,
+            run_id=resolved_run_id,
+            dataset_dir=dataset_dir,
+            predictions_path=predictions_path,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Evaluated {metrics.prediction_count} predictions against "
+        f"{metrics.ground_truth_count} {category_name} boxes"
+    )
+    typer.echo(
+        f"precision={metrics.precision:.4f} recall={metrics.recall:.4f} "
+        f"f1={metrics.f1:.4f} f2={metrics.f2:.4f} "
+        f"AP50={metrics.ap50:.4f} "
+        f"mAP50-95={metrics.map_50_95:.4f}"
+    )
+    typer.echo(f"Metrics JSON: {report_paths['metrics_path']}")
+    typer.echo(f"Summary CSV: {report_paths['summary_path']}")
+    typer.echo(f"Results table: {report_paths['results_table_path']}")
+    typer.echo(f"Leaderboard: {report_paths['leaderboard_path']}")
+    if "sweep_path" in report_paths:
+        typer.echo(f"Confidence sweep CSV: {report_paths['sweep_path']}")
+
+
+@app.command()
 def upload_roboflow() -> None:
     """Upload the exported COCO dataset to Roboflow."""
     typer.echo("upload-roboflow is planned for a later checkpoint.")
@@ -413,3 +554,7 @@ def _optional_int_env(name: str) -> int | None:
         return int(value)
     except ValueError as error:
         raise ValueError(f"{name} must be an integer") from error
+
+
+def _default_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
