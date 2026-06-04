@@ -65,6 +65,8 @@ Export detections as COCO ground-truth annotations for Roboflow:
 uv run rfdetr-faces export-coco
 ```
 
+By default this exports only frames that have at least one RF-DETR detection. Use `--include-empty` if you also want no-detection frames in the COCO dataset.
+
 Upload the COCO dataset to Roboflow:
 
 ```bash

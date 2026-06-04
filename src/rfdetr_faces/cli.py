@@ -7,12 +7,14 @@ from typing import Annotated
 
 import typer
 
+from rfdetr_faces.coco import export_predictions_to_coco
 from rfdetr_faces.config import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_FRAME_FPS,
     DEFAULT_FRAMES_DIR,
     DEFAULT_MODEL_PATH,
     DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_ROBOFLOW_EXPORT_DIR,
     DEFAULT_VIDEO_DIR,
 )
 from rfdetr_faces.inference import predict_faces_from_frames
@@ -216,9 +218,65 @@ def predict_faces(
 
 
 @app.command()
-def export_coco() -> None:
+def export_coco(
+    frames_dir: Annotated[
+        Path,
+        typer.Option(
+            "--frames-dir",
+            help="Directory containing extracted frames and metadata.jsonl.",
+        ),
+    ] = DEFAULT_FRAMES_DIR,
+    predictions_path: Annotated[
+        Path,
+        typer.Option(
+            "--predictions-path",
+            help="JSONL predictions path written by predict-faces.",
+        ),
+    ] = DEFAULT_PREDICTIONS_PATH,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory where the Roboflow-ready COCO export is written.",
+        ),
+    ] = DEFAULT_ROBOFLOW_EXPORT_DIR,
+    include_empty: Annotated[
+        bool,
+        typer.Option(
+            "--include-empty",
+            help="Include frames with no detections in the exported dataset.",
+        ),
+    ] = False,
+    overwrite: Annotated[
+        bool,
+        typer.Option(
+            "--overwrite",
+            help="Overwrite image files already present in the export directory.",
+        ),
+    ] = False,
+) -> None:
     """Export RF-DETR detections as COCO ground-truth annotations."""
-    typer.echo("export-coco is planned for a later checkpoint.")
+    try:
+        result = export_predictions_to_coco(
+            frames_dir=frames_dir,
+            predictions_path=predictions_path,
+            output_dir=output_dir,
+            include_empty=include_empty,
+            overwrite=overwrite,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Exported {result.image_count} images and {result.annotation_count} "
+        f"annotations to {result.dataset_dir}"
+    )
+    typer.echo(f"COCO annotations: {result.annotations_path}")
+    if result.clipped_box_count:
+        typer.echo(f"Clipped boxes at image bounds: {result.clipped_box_count}")
+    if result.skipped_box_count:
+        typer.echo(f"Skipped invalid boxes: {result.skipped_box_count}")
 
 
 @app.command()
