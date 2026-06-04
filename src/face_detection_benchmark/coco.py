@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from rfdetr_faces.config import (
+from face_detection_benchmark.config import (
     DEFAULT_FRAMES_DIR,
     DEFAULT_PREDICTIONS_PATH,
     DEFAULT_ROBOFLOW_EXPORT_DIR,

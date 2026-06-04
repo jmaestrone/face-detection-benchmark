@@ -1,4 +1,4 @@
-"""Command-line entrypoints for the RF-DETR faces pipeline."""
+"""Command-line entrypoints for the face detection benchmark pipeline."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Annotated
 
 import typer
 
-from rfdetr_faces.coco import export_predictions_to_coco
-from rfdetr_faces.config import (
+from face_detection_benchmark.coco import export_predictions_to_coco
+from face_detection_benchmark.config import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_FRAME_FPS,
     DEFAULT_FRAMES_DIR,
@@ -17,11 +17,11 @@ from rfdetr_faces.config import (
     DEFAULT_ROBOFLOW_EXPORT_DIR,
     DEFAULT_VIDEO_DIR,
 )
-from rfdetr_faces.inference import predict_faces_from_frames
-from rfdetr_faces.video import extract_video_frames
+from face_detection_benchmark.inference import predict_faces_from_frames
+from face_detection_benchmark.video import extract_video_frames
 
 app = typer.Typer(
-    help="Extract frames, run RF-DETR face detection, and export Roboflow datasets."
+    help="Extract frames, run face detection models, and export benchmark datasets."
 )
 
 

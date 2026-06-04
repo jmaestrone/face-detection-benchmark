@@ -7,14 +7,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from rfdetr_faces.config import (
+from face_detection_benchmark.config import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_FRAMES_DIR,
     DEFAULT_MODEL_PATH,
     DEFAULT_PREDICTIONS_PATH,
     FACE_CATEGORY_NAME,
 )
-from rfdetr_faces.video import METADATA_FILE_NAME, FrameMetadata
+from face_detection_benchmark.video import METADATA_FILE_NAME, FrameMetadata
 
 
 @dataclass(frozen=True)
