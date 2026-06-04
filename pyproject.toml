@@ -1,0 +1,30 @@
+[project]
+name = "rf-detr-faces-tests"
+version = "0.1.0"
+description = "Local RF-DETR tooling for extracting video frames and exporting face detections to Roboflow."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel",
+    "jupyter",
+    "numpy",
+    "opencv-python",
+    "pillow",
+    "pydantic-settings",
+    "rfdetr",
+    "rich",
+    "roboflow",
+    "supervision",
+    "tqdm",
+    "typer",
+]
+
+[project.scripts]
+rfdetr-faces = "rfdetr_faces.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rfdetr_faces"]

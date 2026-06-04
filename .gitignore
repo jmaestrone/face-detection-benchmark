@@ -1,0 +1,28 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# uv / virtual environments
+.venv/
+
+# Local model checkpoints and generated artifacts
+models/
+data/frames/
+data/predictions/
+data/roboflow-export/
+runs/
+
+# Archives and generated media
+*.zip
+*.tar
+*.tar.gz
+
+# Logs
+*.log
