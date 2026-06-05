@@ -10,6 +10,13 @@ This repo uses `uv` and Python 3.12.
 uv sync
 ```
 
+InsightFace/SCRFD prediction support is optional because it adds ONNX Runtime
+and InsightFace dependencies:
+
+```bash
+uv sync --extra insightface
+```
+
 RF-DETR inference requires a local checkpoint. Put model files under `models/`; for example:
 
 ```text
@@ -137,6 +144,52 @@ uv run face-benchmark compare-validation-runs \
 ```
 
 This writes `summary.csv`, `summary.md`, `precision_recall_overlay.svg`, and `f1_f2_overlay.svg` under `runs/validation/comparisons/<run-id>/`. The command reads existing `threshold_validation.json` files, so it works for any model that emits normalized predictions and validation reports.
+
+## InsightFace Benchmark Prediction
+
+Install the optional InsightFace dependencies before running SCRFD predictions:
+
+```bash
+uv sync --extra insightface
+```
+
+The first InsightFace run may download the selected model pack into a local user cache outside this repo. Keep those cached files and generated benchmark outputs out of git. The default command uses the `buffalo_l` model pack, detector-only loading, CPU ONNX Runtime, `det_size=960`, and a low detection threshold of `0.005` so later validation sweeps can compare operating thresholds:
+
+```bash
+uv run face-benchmark predict-insightface-benchmark \
+  --run-id insightface-buffalo-l-validation \
+  --threshold 0.005 \
+  --det-size 960
+```
+
+By default this reads `data/benchmark/target-video-test-3fps-clean/test/` and writes normalized predictions to:
+
+```text
+runs/benchmarks/insightface-buffalo-l-validation/predictions/insightface-buffalo-l.jsonl
+```
+
+Use `--providers CUDAExecutionProvider,CPUExecutionProvider` only when the local ONNX Runtime environment supports CUDA. The default `--providers CPUExecutionProvider` and `--ctx-id -1` are the portable local baseline.
+
+Validate thresholds for InsightFace with the same command used for RF-DETR:
+
+```bash
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/insightface-buffalo-l-validation/predictions/insightface-buffalo-l.jsonl \
+  --run-id insightface-buffalo-l-validation \
+  --selection-metric f2
+```
+
+If the cleaned target-domain dataset is used for this threshold selection, treat the result as validation analysis only. Do not report it later as an unbiased test-set benchmark.
+
+Compare InsightFace against existing RF-DETR validation runs with:
+
+```bash
+uv run face-benchmark compare-validation-runs \
+  --run-id model-family-comparison \
+  --validation-run runs/validation/rfdetr-ema-1-validation \
+  --validation-run runs/validation/rfdetr-ema-2-validation \
+  --validation-run runs/validation/insightface-buffalo-l-validation
+```
 
 ## RF-DETR Labeling Pipeline
 
