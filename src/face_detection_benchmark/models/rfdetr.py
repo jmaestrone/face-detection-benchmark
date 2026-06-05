@@ -47,6 +47,8 @@ class RfdetrFaceDetector:
         """Return JSON-serializable model configuration metadata."""
         return {
             "weights_path": self.config.weights_path.as_posix(),
+            "checkpoint_name": self.config.weights_path.name,
+            "device": self.config.device,
             "threshold": self.config.threshold,
             "max_detections": self.config.max_detections,
         }

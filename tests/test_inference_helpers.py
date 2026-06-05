@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -24,6 +26,13 @@ from face_detection_benchmark.models.insightface import (
     InsightFaceDetector,
     detector_output_to_records,
     parse_providers,
+)
+from face_detection_benchmark.predictions import (
+    DetectionRecord,
+    ImagePredictionRecord,
+    prediction_record_to_json,
+    summarize_latency,
+    write_latency_summary,
 )
 
 
@@ -114,6 +123,103 @@ class InferenceHelpersTest(unittest.TestCase):
                         threshold=DEFAULT_INSIGHTFACE_THRESHOLD,
                     )
                 )
+
+    def test_prediction_json_includes_timing_and_model_metadata(self) -> None:
+        """Serialize normalized prediction rows with latency and backend metadata."""
+        record = ImagePredictionRecord(
+            file_name="image.jpg",
+            image_path="dataset/image.jpg",
+            width=100,
+            height=100,
+            detections=[
+                DetectionRecord(
+                    bbox_xyxy=[1.0, 2.0, 11.0, 22.0],
+                    bbox_xywh=[1.0, 2.0, 10.0, 20.0],
+                    confidence=0.9,
+                    class_id=1,
+                )
+            ],
+            model_name="rfdetr-test",
+            model_config={
+                "checkpoint_name": "checkpoint.pth",
+                "device": "cpu",
+                "threshold": 0.005,
+                "max_detections": 40,
+            },
+            threshold=0.005,
+            device="cpu",
+            backend="rfdetr",
+            timing_ms={"inference": 12.3456},
+        )
+
+        payload = prediction_record_to_json(record)
+
+        self.assertEqual(payload["timing_ms"], {"inference": 12.3456})
+        self.assertEqual(payload["model_config"]["checkpoint_name"], "checkpoint.pth")
+        self.assertEqual(payload["model_config"]["device"], "cpu")
+        self.assertEqual(payload["detections"][0]["confidence"], 0.9)
+
+    def test_latency_summary_reports_distribution(self) -> None:
+        """Summarize benchmark inference latency without accuracy metrics."""
+        summary = summarize_latency(
+            model_name="insightface-test",
+            backend="insightface",
+            device="cpu",
+            image_count=4,
+            detection_count=7,
+            inference_times_ms=[10.0, 20.0, 30.0, 40.0],
+            total_runtime_ms=125.4321,
+            model_config={
+                "providers": ["CPUExecutionProvider"],
+                "ctx_id": -1,
+                "det_size": 960,
+                "threshold": 0.005,
+                "model_pack": "buffalo_l",
+            },
+        )
+
+        self.assertEqual(summary["model_name"], "insightface-test")
+        self.assertEqual(summary["backend"], "insightface")
+        self.assertEqual(summary["image_count"], 4)
+        self.assertEqual(summary["detection_count"], 7)
+        self.assertEqual(summary["total_runtime_ms"], 125.4321)
+        self.assertEqual(summary["total_inference_ms"], 100.0)
+        self.assertEqual(summary["per_image_inference_ms"]["mean"], 25.0)
+        self.assertEqual(summary["per_image_inference_ms"]["median"], 25.0)
+        self.assertEqual(summary["per_image_inference_ms"]["p90"], 37.0)
+        self.assertNotIn("precision", summary)
+        self.assertNotIn("map_50_95", summary)
+
+    def test_write_latency_summary_writes_json_and_csv(self) -> None:
+        """Write latency artifacts with stable JSON and CSV fields."""
+        summary = summarize_latency(
+            model_name="rfdetr-test",
+            backend="rfdetr",
+            device="cpu",
+            image_count=1,
+            detection_count=2,
+            inference_times_ms=[15.0],
+            total_runtime_ms=20.0,
+            model_config={"checkpoint_name": "checkpoint.pth"},
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            latency_path = root / "latency" / "rfdetr-test.json"
+            latency_table_path = root / "latency.csv"
+
+            write_latency_summary(
+                summary=summary,
+                latency_path=latency_path,
+                latency_table_path=latency_table_path,
+            )
+
+            payload = json.loads(latency_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["model_name"], "rfdetr-test")
+            self.assertEqual(payload["per_image_inference_ms"]["max"], 15.0)
+            csv_lines = latency_table_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(csv_lines), 2)
+            self.assertIn("model_name,backend,device", csv_lines[0])
+            self.assertIn("rfdetr-test,rfdetr,cpu", csv_lines[1])
 
 
 if __name__ == "__main__":

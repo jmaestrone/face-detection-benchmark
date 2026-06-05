@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from time import perf_counter
 
 from face_detection_benchmark.config import (
     DEFAULT_BENCHMARK_DATA_DIR,
@@ -31,6 +32,8 @@ from face_detection_benchmark.predictions import (
     ImagePredictionRecord,
     PredictionResult,
     prediction_record_to_json,
+    summarize_latency,
+    write_latency_summary,
 )
 
 
@@ -72,6 +75,8 @@ def predict_insightface_from_coco_dataset(
     limit: int | None = None,
     preview_dir: Path | None = None,
     max_previews: int = 20,
+    latency_path: Path | None = None,
+    latency_table_path: Path | None = None,
 ) -> PredictionResult:
     """Run InsightFace/SCRFD on every image in a COCO dataset split."""
     _validate_insightface_prediction_options(
@@ -104,15 +109,26 @@ def predict_insightface_from_coco_dataset(
     image_count = 0
     detection_count = 0
     preview_count = 0
+    inference_times_ms: list[float] = []
+    run_started_at = perf_counter()
     with output_path.open("w", encoding="utf-8") as predictions_file:
         for batch in iter_batches(image_records, batch_size):
             _images_rgb, images_bgr, batch_records = load_coco_image_batch(batch)
-            batch_detections = detector.predict_batch(images_bgr)
+            batch_detections = []
+            batch_inference_times_ms = []
+            for image_bgr in images_bgr:
+                image_started_at = perf_counter()
+                image_detections = detector.predict_batch([image_bgr])[0]
+                batch_inference_times_ms.append(
+                    (perf_counter() - image_started_at) * 1000
+                )
+                batch_detections.append(image_detections)
 
-            for image_record, image_bgr, detections in zip(
+            for image_record, image_bgr, detections, inference_ms in zip(
                 batch_records,
                 images_bgr,
                 batch_detections,
+                batch_inference_times_ms,
             ):
                 prediction_record = ImagePredictionRecord(
                     file_name=image_record.file_name,
@@ -125,6 +141,7 @@ def predict_insightface_from_coco_dataset(
                     threshold=threshold,
                     device="cpu" if ctx_id < 0 else f"ctx:{ctx_id}",
                     backend=detector.backend,
+                    timing_ms={"inference": round(inference_ms, 4)},
                 )
                 predictions_file.write(
                     json.dumps(
@@ -135,6 +152,7 @@ def predict_insightface_from_coco_dataset(
                 )
                 image_count += 1
                 detection_count += len(detections)
+                inference_times_ms.append(inference_ms)
 
                 if preview_dir is not None and preview_count < max_previews:
                     write_preview_image(
@@ -144,10 +162,29 @@ def predict_insightface_from_coco_dataset(
                     )
                     preview_count += 1
 
+    device = "cpu" if ctx_id < 0 else f"ctx:{ctx_id}"
+    if latency_path is not None:
+        write_latency_summary(
+            summary=summarize_latency(
+                model_name=model_name,
+                backend=detector.backend,
+                device=device,
+                image_count=image_count,
+                detection_count=detection_count,
+                inference_times_ms=inference_times_ms,
+                total_runtime_ms=(perf_counter() - run_started_at) * 1000,
+                model_config=detector.metadata(),
+            ),
+            latency_path=latency_path,
+            latency_table_path=latency_table_path,
+        )
+
     return PredictionResult(
         output_path=output_path,
         image_count=image_count,
         detection_count=detection_count,
         preview_dir=preview_dir,
         preview_count=preview_count,
+        latency_path=latency_path,
+        latency_table_path=latency_table_path,
     )

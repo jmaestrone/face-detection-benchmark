@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from face_detection_benchmark.env import get_env_value
 
@@ -21,6 +22,19 @@ def optional_int_env(name: str) -> int | None:
         return int(value)
     except ValueError as error:
         raise ValueError(f"{name} must be an integer") from error
+
+
+def benchmark_latency_paths(
+    predictions_path: Path,
+    model_name: str,
+) -> tuple[Path, Path]:
+    """Return latency JSON and CSV paths for a benchmark prediction output."""
+    run_dir = (
+        predictions_path.parent.parent
+        if predictions_path.parent.name == "predictions"
+        else predictions_path.parent
+    )
+    return run_dir / "latency" / f"{model_name}.json", run_dir / "latency.csv"
 
 
 def parse_thresholds(value: str) -> tuple[float, ...]:

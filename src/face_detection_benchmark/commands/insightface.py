@@ -7,7 +7,10 @@ from typing import Annotated
 
 import typer
 
-from face_detection_benchmark.commands.common import default_run_id
+from face_detection_benchmark.commands.common import (
+    benchmark_latency_paths,
+    default_run_id,
+)
 from face_detection_benchmark.config import (
     DEFAULT_BENCHMARK_DATA_DIR,
     DEFAULT_BENCHMARK_DATASET_NAME,
@@ -141,6 +144,10 @@ def predict_insightface_benchmark(
             / "predictions"
             / f"{model_name}.jsonl"
         )
+        latency_path, latency_table_path = benchmark_latency_paths(
+            resolved_output_path,
+            model_name,
+        )
         result = predict_insightface_from_coco_dataset(
             dataset_dir=dataset_dir,
             output_path=resolved_output_path,
@@ -154,6 +161,8 @@ def predict_insightface_benchmark(
             limit=limit,
             preview_dir=preview_dir,
             max_previews=max_previews,
+            latency_path=latency_path,
+            latency_table_path=latency_table_path,
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
@@ -164,3 +173,5 @@ def predict_insightface_benchmark(
     )
     if result.preview_count:
         typer.echo(f"Preview images: {result.preview_count} in {result.preview_dir}")
+    if result.latency_path is not None:
+        typer.echo(f"Latency summary: {result.latency_path}")
