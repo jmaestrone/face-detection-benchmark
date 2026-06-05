@@ -115,6 +115,19 @@ uv run face-benchmark predict-rfdetr-benchmark \
 
 This command defaults to a low inference threshold of `0.005` so validation sweeps can compare operating thresholds without being limited by an earlier `0.25` prediction filter.
 
+### Latency Reports
+
+Benchmark prediction commands also record inference latency. Each normalized JSONL prediction row includes `timing_ms.inference` in milliseconds. RF-DETR reports batch inference time amortized per image; InsightFace reports each image detector call directly.
+
+By default, `predict-rfdetr-benchmark` and `predict-insightface-benchmark` write latency artifacts beside the prediction output:
+
+```text
+runs/benchmarks/<run-id>/latency/<model>.json
+runs/benchmarks/<run-id>/latency.csv
+```
+
+The JSON report includes total runtime, total inference time, per-image mean, median, p90, min/max, image count, detection count, model name, backend, device, and model configuration. Latency reports are separate from accuracy evaluation; `evaluate-detections` still reports only detection metrics such as precision, recall, F scores, AP, and mAP.
+
 If you intentionally treat a labeled split as validation data, choose an operating threshold with:
 
 ```bash
