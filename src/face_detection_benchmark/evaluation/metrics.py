@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from face_detection_benchmark.evaluation.types import DetectionCounts, PredictedBox
+from face_detection_benchmark.evaluation.types import (
+    DetectionCounts,
+    DetectionMatchClassification,
+    GroundTruthBox,
+    PredictedBox,
+)
 
 
 def _best_unmatched_ground_truth_index(
@@ -150,18 +155,18 @@ def average_precision(
     return round(mean_metric(interpolated_precisions), 6)
 
 
-def match_predictions_at_threshold(
+def classify_detection_matches(
     ground_truth_by_file_name: dict[str, list[list[float]]],
     predictions: list[PredictedBox],
     confidence_threshold: float,
     iou_threshold: float,
-) -> DetectionCounts:
-    """Greedily match predictions to ground truth at fixed thresholds."""
+) -> DetectionMatchClassification:
+    """Classify predictions and unmatched ground truth at fixed thresholds."""
     matched_indexes: dict[str, set[int]] = {
         file_name: set() for file_name in ground_truth_by_file_name
     }
-    true_positive_count = 0
-    false_positive_count = 0
+    true_positive_predictions: list[PredictedBox] = []
+    false_positive_predictions: list[PredictedBox] = []
     filtered_predictions = sorted(
         (
             prediction
@@ -180,17 +185,41 @@ def match_predictions_at_threshold(
             iou_threshold=iou_threshold,
         )
         if match_index is None:
-            false_positive_count += 1
+            false_positive_predictions.append(prediction)
         else:
             matched_indexes[prediction.file_name].add(match_index)
-            true_positive_count += 1
+            true_positive_predictions.append(prediction)
 
-    matched_count = sum(len(indexes) for indexes in matched_indexes.values())
-    ground_truth_count = sum(len(boxes) for boxes in ground_truth_by_file_name.values())
+    false_negative_ground_truths = [
+        GroundTruthBox(file_name=file_name, bbox_xyxy=ground_truth_box)
+        for file_name, ground_truth_boxes in ground_truth_by_file_name.items()
+        for ground_truth_index, ground_truth_box in enumerate(ground_truth_boxes)
+        if ground_truth_index not in matched_indexes[file_name]
+    ]
+    return DetectionMatchClassification(
+        true_positive_predictions=true_positive_predictions,
+        false_positive_predictions=false_positive_predictions,
+        false_negative_ground_truths=false_negative_ground_truths,
+    )
+
+
+def match_predictions_at_threshold(
+    ground_truth_by_file_name: dict[str, list[list[float]]],
+    predictions: list[PredictedBox],
+    confidence_threshold: float,
+    iou_threshold: float,
+) -> DetectionCounts:
+    """Greedily match predictions to ground truth at fixed thresholds."""
+    classification = classify_detection_matches(
+        ground_truth_by_file_name=ground_truth_by_file_name,
+        predictions=predictions,
+        confidence_threshold=confidence_threshold,
+        iou_threshold=iou_threshold,
+    )
     return DetectionCounts(
-        true_positive_count=true_positive_count,
-        false_positive_count=false_positive_count,
-        false_negative_count=ground_truth_count - matched_count,
+        true_positive_count=len(classification.true_positive_predictions),
+        false_positive_count=len(classification.false_positive_predictions),
+        false_negative_count=len(classification.false_negative_ground_truths),
     )
 
 

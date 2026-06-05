@@ -35,6 +35,23 @@ class DetectionCounts:
 
 
 @dataclass(frozen=True)
+class GroundTruthBox:
+    """One ground-truth bounding box with its source image filename."""
+
+    file_name: str
+    bbox_xyxy: list[float]
+
+
+@dataclass(frozen=True)
+class DetectionMatchClassification:
+    """Classified detection matches for one confidence and IoU threshold."""
+
+    true_positive_predictions: list[PredictedBox]
+    false_positive_predictions: list[PredictedBox]
+    false_negative_ground_truths: list[GroundTruthBox]
+
+
+@dataclass(frozen=True)
 class DetectionMetrics:
     """Summary detection metrics for one prediction file."""
 

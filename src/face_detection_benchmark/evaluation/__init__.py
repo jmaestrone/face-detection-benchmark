@@ -14,6 +14,7 @@ from face_detection_benchmark.datasets import (
 )
 from face_detection_benchmark.evaluation.metrics import (
     average_precision,
+    classify_detection_matches,
     f1_score,
     fbeta_score,
     iou_xyxy,
@@ -27,8 +28,10 @@ from face_detection_benchmark.evaluation.thresholds import (
     evaluate_confidence_thresholds_from_inputs,
 )
 from face_detection_benchmark.evaluation.types import (
+    DetectionMatchClassification,
     DetectionMetrics,
     EvaluationInputs,
+    GroundTruthBox,
     PredictedBox,
     PredictionRows,
     ThresholdValidationResult,
@@ -45,10 +48,13 @@ __all__ = [
     "DEFAULT_IOU_THRESHOLDS",
     "DEFAULT_SWEEP_THRESHOLDS",
     "DetectionMetrics",
+    "DetectionMatchClassification",
+    "GroundTruthBox",
     "PredictedBox",
     "PredictionRows",
     "ThresholdValidationResult",
     "average_precision",
+    "classify_detection_matches",
     "evaluate_coco_predictions",
     "evaluate_confidence_thresholds",
     "iou_xyxy",

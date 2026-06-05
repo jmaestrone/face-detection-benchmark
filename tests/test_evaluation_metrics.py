@@ -7,6 +7,7 @@ import unittest
 from face_detection_benchmark.evaluation import (
     PredictedBox,
     average_precision,
+    classify_detection_matches,
     iou_xyxy,
     match_predictions_at_threshold,
 )
@@ -41,6 +42,65 @@ class EvaluationMetricsTest(unittest.TestCase):
         self.assertEqual(counts.true_positive_count, 1)
         self.assertEqual(counts.false_positive_count, 1)
         self.assertEqual(counts.false_negative_count, 0)
+
+    def test_classify_detection_matches_returns_overlay_classes(self) -> None:
+        """Classify TP/FP predictions and FN ground truth with greedy matching."""
+        ground_truth = {
+            "image.jpg": [
+                [0, 0, 10, 10],
+                [20, 20, 30, 30],
+            ]
+        }
+        true_positive = PredictedBox("image.jpg", [0, 0, 10, 10], 0.95, "model")
+        duplicate_prediction = PredictedBox("image.jpg", [0, 0, 10, 10], 0.9, "model")
+        unknown_image_prediction = PredictedBox(
+            "unknown.jpg",
+            [0, 0, 10, 10],
+            0.8,
+            "model",
+        )
+        below_threshold_prediction = PredictedBox(
+            "image.jpg",
+            [20, 20, 30, 30],
+            0.49,
+            "model",
+        )
+
+        classification = classify_detection_matches(
+            ground_truth_by_file_name=ground_truth,
+            predictions=[
+                below_threshold_prediction,
+                unknown_image_prediction,
+                duplicate_prediction,
+                true_positive,
+            ],
+            confidence_threshold=0.5,
+            iou_threshold=0.5,
+        )
+        counts = match_predictions_at_threshold(
+            ground_truth_by_file_name=ground_truth,
+            predictions=[
+                below_threshold_prediction,
+                unknown_image_prediction,
+                duplicate_prediction,
+                true_positive,
+            ],
+            confidence_threshold=0.5,
+            iou_threshold=0.5,
+        )
+
+        self.assertEqual(classification.true_positive_predictions, [true_positive])
+        self.assertEqual(
+            classification.false_positive_predictions,
+            [duplicate_prediction, unknown_image_prediction],
+        )
+        self.assertEqual(len(classification.false_negative_ground_truths), 1)
+        false_negative = classification.false_negative_ground_truths[0]
+        self.assertEqual(false_negative.file_name, "image.jpg")
+        self.assertEqual(false_negative.bbox_xyxy, [20, 20, 30, 30])
+        self.assertEqual(counts.true_positive_count, 1)
+        self.assertEqual(counts.false_positive_count, 2)
+        self.assertEqual(counts.false_negative_count, 1)
 
     def test_average_precision_is_one_for_perfect_ranked_predictions(self) -> None:
         """Compute perfect AP for perfectly ranked true-positive predictions."""
