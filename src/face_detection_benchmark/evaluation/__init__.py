@@ -12,7 +12,7 @@ from face_detection_benchmark.datasets import (
     CocoDetectionDataset,
     load_coco_detection_dataset,
 )
-from face_detection_benchmark.evaluation_metrics import (
+from face_detection_benchmark.evaluation.metrics import (
     average_precision,
     f1_score,
     fbeta_score,
@@ -23,15 +23,15 @@ from face_detection_benchmark.evaluation_metrics import (
     recall,
     sweep_row,
 )
-from face_detection_benchmark.evaluation_types import (
+from face_detection_benchmark.evaluation.thresholds import (
+    evaluate_confidence_thresholds_from_inputs,
+)
+from face_detection_benchmark.evaluation.types import (
     DetectionMetrics,
     EvaluationInputs,
     PredictedBox,
     PredictionRows,
     ThresholdValidationResult,
-)
-from face_detection_benchmark.threshold_validation import (
-    evaluate_confidence_thresholds_from_inputs,
 )
 
 DEFAULT_IOU_THRESHOLDS = tuple(round(0.5 + index * 0.05, 2) for index in range(10))

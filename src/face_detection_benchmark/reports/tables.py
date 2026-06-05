@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from face_detection_benchmark.evaluation import (
+from face_detection_benchmark.evaluation.types import (
     DetectionMetrics,
     ThresholdValidationResult,
 )

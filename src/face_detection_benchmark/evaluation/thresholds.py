@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from face_detection_benchmark.evaluation_metrics import (
+from face_detection_benchmark.evaluation.metrics import (
     match_predictions_at_threshold,
     sweep_row,
 )
-from face_detection_benchmark.evaluation_types import (
+from face_detection_benchmark.evaluation.types import (
     EvaluationInputs,
     ThresholdValidationResult,
 )

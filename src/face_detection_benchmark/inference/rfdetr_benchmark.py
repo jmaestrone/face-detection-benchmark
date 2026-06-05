@@ -1,4 +1,4 @@
-"""RF-DETR prediction workflow for extracted video frames."""
+"""RF-DETR prediction workflow for COCO benchmark datasets."""
 
 from __future__ import annotations
 
@@ -6,14 +6,16 @@ import json
 from pathlib import Path
 
 from face_detection_benchmark.config import (
-    DEFAULT_CONFIDENCE_THRESHOLD,
-    DEFAULT_FRAMES_DIR,
+    DEFAULT_BENCHMARK_DATA_DIR,
+    DEFAULT_BENCHMARK_DATASET_NAME,
     DEFAULT_MODEL_PATH,
     DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_ROBOFLOW_TEST_SPLIT,
 )
-from face_detection_benchmark.inference_images import (
+from face_detection_benchmark.datasets import load_coco_detection_dataset
+from face_detection_benchmark.inference.images import (
     iter_batches,
-    load_frame_image_batch,
+    load_coco_image_batch,
     select_device,
     write_preview_image,
 )
@@ -23,12 +25,12 @@ from face_detection_benchmark.predictions import (
     PredictionResult,
     prediction_record_to_json,
 )
-from face_detection_benchmark.video import METADATA_FILE_NAME, FrameMetadata
+
+DEFAULT_VALIDATION_INFERENCE_THRESHOLD = 0.005
 
 
-def _validate_frame_prediction_options(
-    frames_dir: Path,
-    metadata_path: Path,
+def _validate_benchmark_prediction_options(
+    dataset_dir: Path,
     weights_path: Path,
     threshold: float,
     batch_size: int,
@@ -37,11 +39,9 @@ def _validate_frame_prediction_options(
     limit: int | None,
     max_previews: int,
 ) -> None:
-    """Validate options for extracted-frame RF-DETR prediction."""
-    if not frames_dir.exists():
-        raise ValueError(f"Frames directory does not exist: {frames_dir}")
-    if not metadata_path.exists():
-        raise ValueError(f"Frame metadata file does not exist: {metadata_path}")
+    """Validate options for benchmark RF-DETR prediction."""
+    if not dataset_dir.exists():
+        raise ValueError(f"Dataset directory does not exist: {dataset_dir}")
     if not weights_path.exists():
         raise ValueError(f"RF-DETR weights file does not exist: {weights_path}")
     if not 0 <= threshold <= 1:
@@ -58,41 +58,29 @@ def _validate_frame_prediction_options(
         raise ValueError("--max-previews must be greater than or equal to 0")
 
 
-def read_frame_metadata(
-    metadata_path: Path,
-    limit: int | None = None,
-) -> list[FrameMetadata]:
-    """Read extraction metadata written by the frame extraction tool."""
-    frame_records: list[FrameMetadata] = []
-    with metadata_path.open("r", encoding="utf-8") as metadata_file:
-        for line in metadata_file:
-            if not line.strip():
-                continue
-            payload = json.loads(line)
-            frame_records.append(FrameMetadata(**payload))
-            if limit is not None and len(frame_records) >= limit:
-                break
-    return frame_records
+def rfdetr_model_name_from_weights(weights_path: Path) -> str:
+    """Build a readable RF-DETR model name from a checkpoint path."""
+    return f"rfdetr-{weights_path.stem.replace('_', '-')}"
 
 
-def predict_faces_from_frames(
-    frames_dir: Path = DEFAULT_FRAMES_DIR,
-    metadata_path: Path | None = None,
+def predict_faces_from_coco_dataset(
+    dataset_dir: Path = DEFAULT_BENCHMARK_DATA_DIR
+    / DEFAULT_BENCHMARK_DATASET_NAME
+    / DEFAULT_ROBOFLOW_TEST_SPLIT,
     output_path: Path = DEFAULT_PREDICTIONS_PATH,
     weights_path: Path = DEFAULT_MODEL_PATH,
-    threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    threshold: float = DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
     batch_size: int = 4,
     max_detections: int = 40,
     device: str = "auto",
     limit: int | None = None,
     preview_dir: Path | None = None,
     max_previews: int = 20,
+    model_name: str | None = None,
 ) -> PredictionResult:
-    """Run RF-DETR on extracted frame images and write JSONL detections."""
-    resolved_metadata_path = metadata_path or frames_dir / METADATA_FILE_NAME
-    _validate_frame_prediction_options(
-        frames_dir=frames_dir,
-        metadata_path=resolved_metadata_path,
+    """Run RF-DETR on every image in a COCO dataset split."""
+    _validate_benchmark_prediction_options(
+        dataset_dir=dataset_dir,
         weights_path=weights_path,
         threshold=threshold,
         batch_size=batch_size,
@@ -101,10 +89,10 @@ def predict_faces_from_frames(
         limit=limit,
         max_previews=max_previews,
     )
-
-    frame_records = read_frame_metadata(resolved_metadata_path, limit=limit)
-    if not frame_records:
-        raise ValueError(f"No frame records found in {resolved_metadata_path}")
+    dataset = load_coco_detection_dataset(dataset_dir)
+    image_records = dataset.images[:limit] if limit is not None else dataset.images
+    if not image_records:
+        raise ValueError(f"No COCO image records found in {dataset_dir}")
 
     selected_device = select_device(device)
     detector = RfdetrFaceDetector(
@@ -115,6 +103,7 @@ def predict_faces_from_frames(
             max_detections=max_detections,
         )
     )
+    resolved_model_name = model_name or rfdetr_model_name_from_weights(weights_path)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if preview_dir is not None:
@@ -123,37 +112,33 @@ def predict_faces_from_frames(
     image_count = 0
     detection_count = 0
     preview_count = 0
-
     with output_path.open("w", encoding="utf-8") as predictions_file:
-        for batch in iter_batches(frame_records, batch_size):
-            images_rgb, images_bgr, batch_records = load_frame_image_batch(
-                frames_dir,
-                batch,
-            )
+        for batch in iter_batches(image_records, batch_size):
+            images_rgb, images_bgr, batch_records = load_coco_image_batch(batch)
             batch_detections = detector.predict_batch(images_rgb)
 
-            for frame_record, image_bgr, detections in zip(
+            for image_record, image_bgr, detections in zip(
                 batch_records,
                 images_bgr,
                 batch_detections,
             ):
-                image_record = ImagePredictionRecord(
-                    file_name=frame_record.file_name,
-                    image_path=(frames_dir / frame_record.output_path).as_posix(),
-                    width=frame_record.width,
-                    height=frame_record.height,
+                prediction_record = ImagePredictionRecord(
+                    file_name=image_record.file_name,
+                    image_path=image_record.image_path.as_posix(),
+                    width=image_record.width,
+                    height=image_record.height,
                     detections=detections,
-                    model_name=detector.model_name,
+                    model_name=resolved_model_name,
                     model_config=detector.metadata(),
-                    source_video=frame_record.source_video,
-                    frame_index=frame_record.frame_index,
-                    timestamp_seconds=frame_record.timestamp_seconds,
                     threshold=threshold,
                     device=selected_device,
                     backend=detector.backend,
                 )
                 predictions_file.write(
-                    json.dumps(prediction_record_to_json(image_record), sort_keys=True)
+                    json.dumps(
+                        prediction_record_to_json(prediction_record),
+                        sort_keys=True,
+                    )
                     + "\n"
                 )
                 image_count += 1
@@ -163,7 +148,7 @@ def predict_faces_from_frames(
                     write_preview_image(
                         image_bgr=image_bgr,
                         detections=detections,
-                        output_path=preview_dir / frame_record.file_name,
+                        output_path=preview_dir / image_record.file_name,
                     )
                     preview_count += 1
 

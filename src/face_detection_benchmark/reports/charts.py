@@ -8,7 +8,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from face_detection_benchmark.evaluation import ThresholdValidationResult
+from face_detection_benchmark.evaluation.types import ThresholdValidationResult
 
 
 @dataclass(frozen=True)

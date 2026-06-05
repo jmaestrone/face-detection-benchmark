@@ -3,17 +3,19 @@
 import json
 from pathlib import Path
 
-from face_detection_benchmark.charts import (
-    write_f_scores_svg,
-    write_precision_recall_svg,
-)
 from face_detection_benchmark.evaluation import (
-    DetectionMetrics,
-    ThresholdValidationResult,
     metrics_to_json_dict,
     threshold_validation_to_json_dict,
 )
-from face_detection_benchmark.report_tables import (
+from face_detection_benchmark.evaluation.types import (
+    DetectionMetrics,
+    ThresholdValidationResult,
+)
+from face_detection_benchmark.reports.charts import (
+    write_f_scores_svg,
+    write_precision_recall_svg,
+)
+from face_detection_benchmark.reports.tables import (
     append_results_row,
     write_results_leaderboard,
     write_summary_csv,

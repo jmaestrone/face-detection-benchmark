@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from face_detection_benchmark.inference_images import (
+from face_detection_benchmark.inference.images import (
     iter_batches,
     load_coco_image_batch,
     load_frame_image_batch,
     select_device,
     write_preview_image,
 )
-from face_detection_benchmark.rfdetr_benchmark_prediction import (
+from face_detection_benchmark.inference.rfdetr_benchmark import (
     DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
     predict_faces_from_coco_dataset,
     rfdetr_model_name_from_weights,
 )
-from face_detection_benchmark.rfdetr_frame_prediction import (
+from face_detection_benchmark.inference.rfdetr_frames import (
     predict_faces_from_frames,
     read_frame_metadata,
 )

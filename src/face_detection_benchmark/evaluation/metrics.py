@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from face_detection_benchmark.evaluation_types import DetectionCounts, PredictedBox
+from face_detection_benchmark.evaluation.types import DetectionCounts, PredictedBox
 
 
 def _best_unmatched_ground_truth_index(

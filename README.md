@@ -162,10 +162,10 @@ uv run face-benchmark export-coco
 
 By default this exports only frames that have at least one RF-DETR detection. Use `--include-empty` if you also want no-detection frames in the COCO dataset.
 
-Upload the COCO dataset to Roboflow:
+The Roboflow upload command is currently a planned placeholder:
 
 ```bash
-uv run face-benchmark upload-roboflow --workspace <workspace> --project <project-id>
+uv run face-benchmark upload-roboflow
 ```
 
-The exported RF-DETR detections are treated as ground truth for upload. Any noisy or missing boxes should be corrected later in Roboflow.
+When upload support is implemented, the exported RF-DETR detections should be treated as ground truth for upload. Any noisy or missing boxes should be corrected later in Roboflow.
