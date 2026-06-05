@@ -197,5 +197,5 @@ def download_roboflow_benchmark(
 
 
 def upload_roboflow() -> None:
-    """Upload the exported COCO dataset to Roboflow."""
+    """Report that Roboflow upload support is not implemented yet."""
     typer.echo("upload-roboflow is planned for a later checkpoint.")

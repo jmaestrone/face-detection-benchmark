@@ -34,6 +34,17 @@ def evaluate_detections(
             help="Normalized prediction JSONL to evaluate.",
         ),
     ],
+    confidence_threshold: Annotated[
+        float,
+        typer.Option(
+            "--confidence-threshold",
+            min=0.0,
+            max=1.0,
+            help=(
+                "Required preselected confidence threshold for precision/recall/F1/F2."
+            ),
+        ),
+    ],
     dataset_dir: Annotated[
         Path,
         typer.Option(
@@ -83,17 +94,6 @@ def evaluate_detections(
             help="COCO category name to evaluate.",
         ),
     ] = FACE_CATEGORY_NAME,
-    confidence_threshold: Annotated[
-        float | None,
-        typer.Option(
-            "--confidence-threshold",
-            min=0.0,
-            max=1.0,
-            help=(
-                "Required preselected confidence threshold for precision/recall/F1/F2."
-            ),
-        ),
-    ] = None,
     iou_threshold: Annotated[
         float,
         typer.Option(
@@ -116,11 +116,6 @@ def evaluate_detections(
 ) -> None:
     """Evaluate normalized detections against a COCO benchmark split."""
     try:
-        if confidence_threshold is None:
-            raise ValueError(
-                "--confidence-threshold is required; choose it before evaluating "
-                "the benchmark"
-            )
         metrics = evaluate_coco_predictions(
             dataset_dir=dataset_dir,
             predictions_path=predictions_path,
