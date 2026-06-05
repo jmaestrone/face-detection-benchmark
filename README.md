@@ -103,6 +103,36 @@ By default this reads `data/benchmark/target-video-test-3fps-clean/test/`, write
 
 Choose `--confidence-threshold` before evaluating the benchmark. Do not run multiple thresholds on the test set to choose the best one. A diagnostic confidence sweep is available with `--include-confidence-sweep`, but it should not be used for threshold selection on this test-only dataset.
 
+## Prediction Overlay Rendering
+
+Render annotated prediction images for one or more normalized JSONL files at selected confidence thresholds:
+
+```bash
+uv run face-benchmark render-prediction-overlays \
+  --run-id model-overlay-comparison \
+  --prediction-spec rfdetr-ema-1=runs/benchmarks/rfdetr-ema-1-validation/predictions/rfdetr-ema-1.jsonl:0.30 \
+  --prediction-spec insightface-buffalo-l=runs/benchmarks/insightface-buffalo-l-validation/predictions/insightface-buffalo-l.jsonl:0.35 \
+  --iou-threshold 0.5
+```
+
+Each `--prediction-spec` uses `label=path/to/predictions.jsonl:threshold`. The label is used as the output directory name, the path points to a normalized prediction JSONL file, and the threshold filters out lower-confidence predictions before matching.
+
+By default this reads `data/benchmark/target-video-test-3fps-clean/test/` and writes outputs under:
+
+```text
+runs/visualizations/<run-id>/models/<label>/<image-file-name>
+runs/visualizations/<run-id>/summary.csv
+runs/visualizations/<run-id>/summary.json
+```
+
+When two or more specs are provided, the command also writes side-by-side comparison images under:
+
+```text
+runs/visualizations/<run-id>/comparison/<image-file-name>
+```
+
+The overlays use the same greedy matching semantics as benchmark evaluation at the selected IoU threshold. True-positive prediction boxes are green and labeled `TP <confidence>`, false-positive prediction boxes are yellow and labeled `FP <confidence>`, and unmatched ground-truth boxes are red and labeled `FN`. The summary files include TP, FP, FN, precision, recall, F1, F2, threshold, prediction path, and IoU threshold for each spec.
+
 ## Threshold Validation
 
 Generate RF-DETR predictions directly on the cleaned COCO split before validation:
