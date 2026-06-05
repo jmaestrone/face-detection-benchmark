@@ -21,6 +21,12 @@ from face_detection_benchmark.reports.comparison import (
     load_validation_runs,
     write_validation_comparison_reports,
 )
+from face_detection_benchmark.reports.overlays import (
+    PredictionOverlayResult,
+    PredictionOverlaySpec,
+    parse_prediction_overlay_spec,
+    render_prediction_overlays,
+)
 from face_detection_benchmark.reports.tables import (
     append_results_row,
     write_results_leaderboard,
@@ -32,6 +38,10 @@ from face_detection_benchmark.reports.tables import (
 
 __all__ = [
     "append_results_row",
+    "parse_prediction_overlay_spec",
+    "PredictionOverlayResult",
+    "PredictionOverlaySpec",
+    "render_prediction_overlays",
     "write_evaluation_reports",
     "write_f_scores_overlay_svg",
     "write_f_scores_svg",

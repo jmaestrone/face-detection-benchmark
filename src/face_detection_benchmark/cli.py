@@ -12,6 +12,7 @@ from face_detection_benchmark.commands.datasets import (
 from face_detection_benchmark.commands.evaluation import (
     compare_validation_runs,
     evaluate_detections,
+    render_prediction_overlays,
     validate_thresholds,
 )
 from face_detection_benchmark.commands.insightface import predict_insightface_benchmark
@@ -37,6 +38,7 @@ def register_commands(typer_app: typer.Typer) -> None:
     typer_app.command()(evaluate_detections)
     typer_app.command()(validate_thresholds)
     typer_app.command()(compare_validation_runs)
+    typer_app.command()(render_prediction_overlays)
     typer_app.command()(upload_roboflow)
 
 

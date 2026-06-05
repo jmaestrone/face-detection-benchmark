@@ -49,6 +49,7 @@ __all__ = [
     "DEFAULT_SWEEP_THRESHOLDS",
     "DetectionMetrics",
     "DetectionMatchClassification",
+    "EvaluationInputs",
     "GroundTruthBox",
     "PredictedBox",
     "PredictionRows",
@@ -58,6 +59,7 @@ __all__ = [
     "evaluate_coco_predictions",
     "evaluate_confidence_thresholds",
     "iou_xyxy",
+    "load_evaluation_inputs",
     "match_predictions_at_threshold",
     "metrics_to_json_dict",
     "read_prediction_boxes",
@@ -102,7 +104,7 @@ def _xywh_to_xyxy(bbox_xywh: list[float]) -> list[float]:
     return [x_min, y_min, x_min + width, y_min + height]
 
 
-def _load_evaluation_inputs(
+def load_evaluation_inputs(
     dataset_dir: Path,
     predictions_path: Path,
     category_name: str,
@@ -197,7 +199,7 @@ def evaluate_coco_predictions(
     sweep_thresholds: Iterable[float] | None = None,
 ) -> DetectionMetrics:
     """Evaluate normalized prediction JSONL against a COCO detection dataset."""
-    inputs = _load_evaluation_inputs(
+    inputs = load_evaluation_inputs(
         dataset_dir=dataset_dir,
         predictions_path=predictions_path,
         category_name=category_name,
@@ -274,7 +276,7 @@ def evaluate_confidence_thresholds(
     selection_metric: str = "f2",
 ) -> ThresholdValidationResult:
     """Evaluate many confidence thresholds and select one validation threshold."""
-    inputs = _load_evaluation_inputs(
+    inputs = load_evaluation_inputs(
         dataset_dir=dataset_dir,
         predictions_path=predictions_path,
         category_name=category_name,

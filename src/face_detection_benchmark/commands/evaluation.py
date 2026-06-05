@@ -21,9 +21,13 @@ from face_detection_benchmark.evaluation import (
     evaluate_confidence_thresholds,
 )
 from face_detection_benchmark.reports import (
+    parse_prediction_overlay_spec,
     write_evaluation_reports,
     write_threshold_validation_reports,
     write_validation_comparison_reports,
+)
+from face_detection_benchmark.reports import (
+    render_prediction_overlays as render_prediction_overlay_reports,
 )
 
 
@@ -324,3 +328,98 @@ def compare_validation_runs(
     typer.echo(f"Summary Markdown: {report_paths['summary_markdown_path']}")
     typer.echo(f"Precision-recall overlay: {report_paths['precision_recall_path']}")
     typer.echo(f"F-score overlay: {report_paths['f_scores_path']}")
+
+
+def render_prediction_overlays(
+    prediction_specs: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--prediction-spec",
+            help=(
+                "Prediction overlay spec as label=path/to/predictions.jsonl:threshold. "
+                "Repeat this option for each model."
+            ),
+        ),
+    ] = None,
+    dataset_dir: Annotated[
+        Path,
+        typer.Option(
+            "--dataset-dir",
+            help="COCO split directory containing _annotations.coco.json.",
+        ),
+    ] = DEFAULT_BENCHMARK_DATA_DIR
+    / DEFAULT_BENCHMARK_DATASET_NAME
+    / DEFAULT_ROBOFLOW_TEST_SPLIT,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help=(
+                "Visualization output directory. Defaults to "
+                "runs/visualizations/<run-id>."
+            ),
+        ),
+    ] = None,
+    runs_dir: Annotated[
+        Path,
+        typer.Option(
+            "--runs-dir",
+            help="Root runs directory used when --output-dir is not supplied.",
+        ),
+    ] = DEFAULT_RUNS_DIR,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    category_name: Annotated[
+        str,
+        typer.Option(
+            "--category",
+            help="COCO category name to render.",
+        ),
+    ] = FACE_CATEGORY_NAME,
+    iou_threshold: Annotated[
+        float,
+        typer.Option(
+            "--iou-threshold",
+            min=0.0,
+            max=1.0,
+            help="IoU threshold for TP/FP/FN overlay classification.",
+        ),
+    ] = 0.5,
+) -> None:
+    """Render TP/FP/FN prediction overlay images for one or more models."""
+    try:
+        resolved_prediction_specs = [
+            parse_prediction_overlay_spec(prediction_spec)
+            for prediction_spec in prediction_specs or []
+        ]
+        resolved_run_id = run_id or default_run_id()
+        resolved_output_dir = output_dir or (
+            runs_dir / "visualizations" / resolved_run_id
+        )
+        result = render_prediction_overlay_reports(
+            dataset_dir=dataset_dir,
+            prediction_specs=resolved_prediction_specs,
+            output_dir=resolved_output_dir,
+            category_name=category_name,
+            iou_threshold=iou_threshold,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Rendered overlays for {len(result.model_dirs)} model(s) and "
+        f"{result.image_count} image(s)"
+    )
+    typer.echo(f"Output directory: {result.output_dir}")
+    for label, model_dir in result.model_dirs.items():
+        typer.echo(f"{label} overlays: {model_dir}")
+    if result.comparison_dir is not None:
+        typer.echo(f"Comparison overlays: {result.comparison_dir}")
+    typer.echo(f"Summary CSV: {result.summary_csv_path}")
+    typer.echo(f"Summary JSON: {result.summary_json_path}")
