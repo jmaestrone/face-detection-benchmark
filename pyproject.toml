@@ -19,6 +19,12 @@ dependencies = [
     "typer",
 ]
 
+[project.optional-dependencies]
+insightface = [
+    "insightface",
+    "onnxruntime",
+]
+
 [project.scripts]
 face-benchmark = "face_detection_benchmark.cli:app"
 

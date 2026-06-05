@@ -1,4 +1,4 @@
-"""Public RF-DETR inference API for face detection workflows."""
+"""Public inference API for face detection benchmark workflows."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ from face_detection_benchmark.inference.images import (
     load_frame_image_batch,
     select_device,
     write_preview_image,
+)
+from face_detection_benchmark.inference.insightface_benchmark import (
+    predict_insightface_from_coco_dataset,
 )
 from face_detection_benchmark.inference.rfdetr_benchmark import (
     DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
@@ -27,6 +30,7 @@ __all__ = [
     "load_coco_image_batch",
     "load_frame_image_batch",
     "load_image_batch",
+    "predict_insightface_from_coco_dataset",
     "predict_faces_from_coco_dataset",
     "predict_faces_from_frames",
     "read_frame_metadata",

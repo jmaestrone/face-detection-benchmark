@@ -14,6 +14,7 @@ from face_detection_benchmark.commands.evaluation import (
     evaluate_detections,
     validate_thresholds,
 )
+from face_detection_benchmark.commands.insightface import predict_insightface_benchmark
 from face_detection_benchmark.commands.rfdetr import (
     predict_faces,
     predict_rfdetr_benchmark,
@@ -30,6 +31,7 @@ def register_commands(typer_app: typer.Typer) -> None:
     typer_app.command()(extract_frames)
     typer_app.command()(predict_faces)
     typer_app.command()(predict_rfdetr_benchmark)
+    typer_app.command()(predict_insightface_benchmark)
     typer_app.command()(export_coco)
     typer_app.command()(download_roboflow_benchmark)
     typer_app.command()(evaluate_detections)
