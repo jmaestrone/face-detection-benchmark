@@ -10,6 +10,7 @@ from face_detection_benchmark.commands.datasets import (
     upload_roboflow,
 )
 from face_detection_benchmark.commands.evaluation import (
+    compare_validation_runs,
     evaluate_detections,
     validate_thresholds,
 )
@@ -33,6 +34,7 @@ def register_commands(typer_app: typer.Typer) -> None:
     typer_app.command()(download_roboflow_benchmark)
     typer_app.command()(evaluate_detections)
     typer_app.command()(validate_thresholds)
+    typer_app.command()(compare_validation_runs)
     typer_app.command()(upload_roboflow)
 
 

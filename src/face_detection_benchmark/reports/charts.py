@@ -22,6 +22,7 @@ class ChartSeries:
     point_labels: list[str]
     show_point_labels: bool = False
     label_callouts: bool = False
+    stroke_dasharray: str | None = None
 
 
 def _line_chart_svg(
@@ -29,8 +30,7 @@ def _line_chart_svg(
     x_label: str,
     y_label: str,
     series: list[ChartSeries],
-    selected_point: tuple[float, float],
-    selected_label: str,
+    selected_points: list[tuple[tuple[float, float], str, str]],
     x_domain: tuple[float, float],
     y_domain: tuple[float, float],
     tick_step: float,
@@ -100,7 +100,7 @@ def _line_chart_svg(
         )
         polyline_elements.append(
             f'<polyline fill="none" stroke="{chart_series.color}" stroke-width="3" '
-            f'points="{path_points}" />'
+            f'{_stroke_dash_attribute(chart_series)}points="{path_points}" />'
         )
         for point_index, (x_value, y_value) in enumerate(chart_series.points):
             point_x = map_x(x_value)
@@ -145,15 +145,37 @@ def _line_chart_svg(
             [
                 f'<line x1="{width - 184}" y1="{legend_y}" '
                 f'x2="{width - 154}" y2="{legend_y}" stroke="{chart_series.color}" '
-                'stroke-width="3" />',
+                f'stroke-width="3" {_stroke_dash_attribute(chart_series)}/>',
                 f'<text x="{width - 146}" y="{legend_y + 4}" font-size="13" '
                 f'fill="#334155">{escape(chart_series.label)}</text>',
             ]
         )
 
-    selected_data_x, selected_data_y = selected_point
-    selected_svg_x = map_x(selected_data_x)
-    selected_svg_y = map_y(selected_data_y)
+    selected_point_elements = []
+    for selected_point, selected_label, selected_color in selected_points:
+        selected_data_x, selected_data_y = selected_point
+        selected_svg_x = map_x(selected_data_x)
+        selected_svg_y = map_y(selected_data_y)
+        selected_label_x = _clamp(
+            selected_svg_x + 10,
+            lower=margin_left + 4,
+            upper=margin_left + plot_width - _label_width(selected_label) - 4,
+        )
+        selected_label_y = _clamp(
+            selected_svg_y + 22,
+            lower=margin_top + 16,
+            upper=margin_top + plot_height - 8,
+        )
+        selected_point_elements.extend(
+            [
+                f'<circle cx="{selected_svg_x:.2f}" cy="{selected_svg_y:.2f}" '
+                f'r="7" fill="{selected_color}" stroke="#334155" stroke-width="2">'
+                f"<title>{escape(selected_label)}</title></circle>",
+                f'<text x="{selected_label_x:.2f}" y="{selected_label_y:.2f}" '
+                'font-size="13" font-weight="700" fill="#334155">'
+                f"{escape(selected_label)}</text>",
+            ]
+        )
     return "\n".join(
         [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" '
@@ -172,12 +194,7 @@ def _line_chart_svg(
             *polyline_elements,
             *point_elements,
             *point_label_elements,
-            f'<circle cx="{selected_svg_x:.2f}" cy="{selected_svg_y:.2f}" '
-            'r="7" fill="#f59e0b" stroke="#92400e" stroke-width="2">'
-            f"<title>{escape(selected_label)}</title></circle>",
-            f'<text x="{selected_svg_x + 10:.2f}" y="{selected_svg_y + 22:.2f}" '
-            'font-size="13" font-weight="700" fill="#92400e">'
-            f"{escape(selected_label)}</text>",
+            *selected_point_elements,
             f'<text x="{width / 2:.2f}" y="{height - 12}" '
             f'text-anchor="middle" font-size="14" fill="#334155">{x_label}</text>',
             f'<text x="22" y="{margin_top + plot_height / 2:.2f}" '
@@ -194,6 +211,10 @@ def _precision_recall_series(
     result: ThresholdValidationResult,
     min_recall: float,
     min_precision: float,
+    label: str = "precision_recall",
+    color: str = "#2563eb",
+    show_point_labels: bool = True,
+    label_callouts: bool = True,
 ) -> ChartSeries:
     """Build one annotated series for the precision-recall chart."""
     precision_recall_groups = _group_threshold_rows_by_precision_recall(
@@ -215,13 +236,13 @@ def _precision_recall_series(
     if not visible_groups:
         visible_groups = precision_recall_groups
     return ChartSeries(
-        label="precision_recall",
+        label=label,
         points=[group["point"] for group in visible_groups],
-        color="#2563eb",
+        color=color,
         point_titles=[str(group["title"]) for group in visible_groups],
         point_labels=[str(group["label"]) for group in visible_groups],
-        show_point_labels=True,
-        label_callouts=True,
+        show_point_labels=show_point_labels,
+        label_callouts=label_callouts,
     )
 
 
@@ -386,6 +407,26 @@ def _label_background_elements(
     ]
 
 
+def _model_color(index: int) -> str:
+    """Return a stable chart color for a model series."""
+    colors = (
+        "#2563eb",
+        "#dc2626",
+        "#16a34a",
+        "#9333ea",
+        "#ea580c",
+        "#0891b2",
+    )
+    return colors[index % len(colors)]
+
+
+def _stroke_dash_attribute(chart_series: ChartSeries) -> str:
+    """Return an SVG dash attribute for dashed series."""
+    if chart_series.stroke_dasharray is None:
+        return ""
+    return f'stroke-dasharray="{chart_series.stroke_dasharray}" '
+
+
 def write_precision_recall_svg(
     result: ThresholdValidationResult,
     precision_recall_path: Path,
@@ -406,8 +447,13 @@ def write_precision_recall_svg(
             x_label="Recall",
             y_label="Precision",
             series=[precision_recall_series],
-            selected_point=selected_point,
-            selected_label=f"selected t={_format_threshold(result.selected_threshold)}",
+            selected_points=[
+                (
+                    selected_point,
+                    f"selected t={_format_threshold(result.selected_threshold)}",
+                    "#f59e0b",
+                )
+            ],
             x_domain=_metric_domain(
                 [point[0] for point in precision_recall_series.points]
             ),
@@ -442,6 +488,7 @@ def write_f_scores_svg(result: ThresholdValidationResult, f_scores_path: Path) -
                     point_labels=[
                         _threshold_label(row) for row in result.threshold_metrics
                     ],
+                    stroke_dasharray="6 4",
                 ),
                 ChartSeries(
                     label="f2",
@@ -456,11 +503,130 @@ def write_f_scores_svg(result: ThresholdValidationResult, f_scores_path: Path) -
                     ],
                 ),
             ],
-            selected_point=(
-                float(result.selected_metrics["confidence_threshold"]),
-                float(result.selected_metrics[selected_score_metric]),
+            selected_points=[
+                (
+                    (
+                        float(result.selected_metrics["confidence_threshold"]),
+                        float(result.selected_metrics[selected_score_metric]),
+                    ),
+                    f"selected t={_format_threshold(result.selected_threshold)}",
+                    "#f59e0b",
+                )
+            ],
+            x_domain=(0.0, 1.0),
+            y_domain=(0.0, 1.0),
+            tick_step=0.1,
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_precision_recall_overlay_svg(
+    results: list[ThresholdValidationResult],
+    precision_recall_path: Path,
+) -> None:
+    """Write a multi-model precision-recall SVG chart."""
+    series = [
+        _precision_recall_series(
+            result=result,
+            min_recall=0.60,
+            min_precision=0.60,
+            label=result.model_name,
+            color=_model_color(index),
+            show_point_labels=False,
+            label_callouts=False,
+        )
+        for index, result in enumerate(results)
+    ]
+    all_points = [point for chart_series in series for point in chart_series.points]
+    selected_points = [
+        (
+            (
+                float(result.selected_metrics["recall"]),
+                float(result.selected_metrics["precision"]),
             ),
-            selected_label=f"selected t={_format_threshold(result.selected_threshold)}",
+            f"{result.model_name} t={_format_threshold(result.selected_threshold)}",
+            _model_color(index),
+        )
+        for index, result in enumerate(results)
+    ]
+    precision_recall_path.write_text(
+        _line_chart_svg(
+            title="Precision vs Recall Comparison",
+            x_label="Recall",
+            y_label="Precision",
+            series=series,
+            selected_points=selected_points,
+            x_domain=_metric_domain([point[0] for point in all_points]),
+            y_domain=_metric_domain([point[1] for point in all_points]),
+            tick_step=0.05,
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_f_scores_overlay_svg(
+    results: list[ThresholdValidationResult],
+    f_scores_path: Path,
+) -> None:
+    """Write a multi-model F1/F2 threshold sweep SVG chart."""
+    series: list[ChartSeries] = []
+    for index, result in enumerate(results):
+        color = _model_color(index)
+        series.append(
+            ChartSeries(
+                label=f"{result.model_name} f1",
+                points=_threshold_score_points(result, "f1"),
+                color=color,
+                point_titles=[
+                    _threshold_score_title(row, "f1")
+                    for row in result.threshold_metrics
+                ],
+                point_labels=[
+                    _threshold_label(row) for row in result.threshold_metrics
+                ],
+            )
+        )
+        series.append(
+            ChartSeries(
+                label=f"{result.model_name} f2",
+                points=_threshold_score_points(result, "f2"),
+                color=color,
+                point_titles=[
+                    _threshold_score_title(row, "f2")
+                    for row in result.threshold_metrics
+                ],
+                point_labels=[
+                    _threshold_label(row) for row in result.threshold_metrics
+                ],
+                stroke_dasharray="6 4",
+            )
+        )
+
+    selected_points = [
+        (
+            (
+                float(result.selected_metrics["confidence_threshold"]),
+                float(
+                    result.selected_metrics[
+                        result.selection_metric
+                        if result.selection_metric in {"f1", "f2"}
+                        else "f2"
+                    ]
+                ),
+            ),
+            f"{result.model_name} t={_format_threshold(result.selected_threshold)}",
+            _model_color(index),
+        )
+        for index, result in enumerate(results)
+    ]
+    f_scores_path.write_text(
+        _line_chart_svg(
+            title="F Scores by Threshold Comparison",
+            x_label="Confidence threshold",
+            y_label="Score",
+            series=series,
+            selected_points=selected_points,
             x_domain=(0.0, 1.0),
             y_domain=(0.0, 1.0),
             tick_step=0.1,

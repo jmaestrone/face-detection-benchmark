@@ -23,6 +23,7 @@ from face_detection_benchmark.evaluation import (
 from face_detection_benchmark.reports import (
     write_evaluation_reports,
     write_threshold_validation_reports,
+    write_validation_comparison_reports,
 )
 
 
@@ -269,3 +270,57 @@ def validate_thresholds(
     typer.echo(f"Threshold Markdown: {report_paths['threshold_metrics_markdown_path']}")
     typer.echo(f"Precision-recall plot: {report_paths['precision_recall_path']}")
     typer.echo(f"F-score plot: {report_paths['f_scores_path']}")
+
+
+def compare_validation_runs(
+    validation_runs: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--validation-run",
+            help=(
+                "Validation run directory or threshold_validation.json path. "
+                "Repeat this option for each model."
+            ),
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help=(
+                "Comparison output directory. Defaults to "
+                "runs/validation/comparisons/<run-id>."
+            ),
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+) -> None:
+    """Compare multiple threshold validation runs on shared plots."""
+    try:
+        resolved_validation_runs = validation_runs or []
+        resolved_run_id = run_id or default_run_id()
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "validation" / "comparisons" / resolved_run_id
+        )
+        report_paths = write_validation_comparison_reports(
+            validation_run_paths=resolved_validation_runs,
+            output_dir=resolved_output_dir,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Compared {len(resolved_validation_runs)} validation runs in "
+        f"{resolved_output_dir}"
+    )
+    typer.echo(f"Summary CSV: {report_paths['summary_csv_path']}")
+    typer.echo(f"Summary Markdown: {report_paths['summary_markdown_path']}")
+    typer.echo(f"Precision-recall overlay: {report_paths['precision_recall_path']}")
+    typer.echo(f"F-score overlay: {report_paths['f_scores_path']}")

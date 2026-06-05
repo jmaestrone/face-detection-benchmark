@@ -127,6 +127,17 @@ By default this reads the same local COCO split path as benchmark evaluation, ev
 
 Use `--selection-metric f1`, `--selection-metric f2`, `--selection-metric precision`, or `--selection-metric recall` to decide how the selected threshold is chosen. If multiple thresholds have the same selected metric value, the higher threshold is selected. Use `--thresholds 0.10,0.20,0.30` to provide a custom threshold grid. If this cleaned target-domain dataset is used to choose a threshold, treat the output as validation analysis rather than an unbiased test benchmark result.
 
+Compare multiple validation runs with shared plots:
+
+```bash
+uv run face-benchmark compare-validation-runs \
+  --run-id rfdetr-ema-comparison \
+  --validation-run runs/validation/rfdetr-ema-1-validation \
+  --validation-run runs/validation/rfdetr-ema-2-validation
+```
+
+This writes `summary.csv`, `summary.md`, `precision_recall_overlay.svg`, and `f1_f2_overlay.svg` under `runs/validation/comparisons/<run-id>/`. The command reads existing `threshold_validation.json` files, so it works for any model that emits normalized predictions and validation reports.
+
 ## RF-DETR Labeling Pipeline
 
 Extract sampled frames from the current videos:

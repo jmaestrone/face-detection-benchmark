@@ -12,8 +12,14 @@ from face_detection_benchmark.evaluation.types import (
     ThresholdValidationResult,
 )
 from face_detection_benchmark.reports.charts import (
+    write_f_scores_overlay_svg,
     write_f_scores_svg,
+    write_precision_recall_overlay_svg,
     write_precision_recall_svg,
+)
+from face_detection_benchmark.reports.comparison import (
+    load_validation_runs,
+    write_validation_comparison_reports,
 )
 from face_detection_benchmark.reports.tables import (
     append_results_row,
@@ -27,7 +33,9 @@ from face_detection_benchmark.reports.tables import (
 __all__ = [
     "append_results_row",
     "write_evaluation_reports",
+    "write_f_scores_overlay_svg",
     "write_f_scores_svg",
+    "write_precision_recall_overlay_svg",
     "write_precision_recall_svg",
     "write_results_leaderboard",
     "write_summary_csv",
@@ -35,6 +43,8 @@ __all__ = [
     "write_threshold_metrics_csv",
     "write_threshold_metrics_markdown",
     "write_threshold_validation_reports",
+    "load_validation_runs",
+    "write_validation_comparison_reports",
 ]
 
 
