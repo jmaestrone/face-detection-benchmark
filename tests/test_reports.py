@@ -191,6 +191,91 @@ class ReportWritersTest(unittest.TestCase):
                 paths["f_scores_path"].read_text(encoding="utf-8"),
             )
 
+    def test_precision_recall_plot_falls_back_for_lower_metric_models(self) -> None:
+        """Show multiple lower-domain points when the primary cutoff is too strict."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            result = threshold_validation_result_for_test(
+                model_name="lower-metric-model",
+                selected_threshold=0.35,
+                precision=0.575,
+                recall=0.267442,
+                f1=0.365079,
+                f2=0.299479,
+                threshold_metrics=[
+                    threshold_row_for_test(0.005, 0.000051, 0.802326),
+                    threshold_row_for_test(0.2, 0.245283, 0.302326),
+                    threshold_row_for_test(0.35, 0.575, 0.267442),
+                    threshold_row_for_test(0.5, 0.782609, 0.209302),
+                    threshold_row_for_test(0.8, 0.0, 0.0),
+                ],
+            )
+
+            paths = write_threshold_validation_reports(
+                result=result,
+                output_dir=root / "validation",
+                dataset_dir=root / "dataset",
+                predictions_path=root / "predictions.jsonl",
+            )
+
+            precision_recall_svg = paths["precision_recall_path"].read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("t=0.20", precision_recall_svg)
+            self.assertIn("selected t=0.35", precision_recall_svg)
+            self.assertIn("t=0.50", precision_recall_svg)
+            self.assertNotIn("t=0.005", precision_recall_svg)
+
+    def test_precision_recall_overlay_falls_back_per_model(self) -> None:
+        """Keep comparison overlays informative for models below the primary cutoff."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            strong_run = root / "strong-run"
+            lower_run = root / "lower-run"
+            strong_run.mkdir()
+            lower_run.mkdir()
+            strong_result = threshold_validation_result_for_test(
+                model_name="strong-model",
+                selected_threshold=0.3,
+                precision=0.8,
+                recall=0.8,
+                f1=0.8,
+                f2=0.8,
+            )
+            lower_result = threshold_validation_result_for_test(
+                model_name="lower-metric-model",
+                selected_threshold=0.35,
+                precision=0.575,
+                recall=0.267442,
+                f1=0.365079,
+                f2=0.299479,
+                threshold_metrics=[
+                    threshold_row_for_test(0.2, 0.245283, 0.302326),
+                    threshold_row_for_test(0.35, 0.575, 0.267442),
+                    threshold_row_for_test(0.5, 0.782609, 0.209302),
+                ],
+            )
+            (strong_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(strong_result)),
+                encoding="utf-8",
+            )
+            (lower_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(lower_result)),
+                encoding="utf-8",
+            )
+
+            paths = write_validation_comparison_reports(
+                validation_run_paths=[strong_run, lower_run],
+                output_dir=root / "comparison",
+            )
+
+            precision_recall_svg = paths["precision_recall_path"].read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("lower-metric-model", precision_recall_svg)
+            self.assertIn("threshold=0.20", precision_recall_svg)
+            self.assertIn("lower-metric-model t=0.35", precision_recall_svg)
+
 
 def threshold_validation_result_for_test(
     model_name: str,
@@ -199,6 +284,7 @@ def threshold_validation_result_for_test(
     recall: float,
     f1: float,
     f2: float,
+    threshold_metrics: list[dict[str, float | int]] | None = None,
 ) -> ThresholdValidationResult:
     """Build a validation result for report tests."""
     selected_metrics = {
@@ -220,20 +306,30 @@ def threshold_validation_result_for_test(
         selection_metric="f2",
         selected_threshold=selected_threshold,
         selected_metrics=selected_metrics,
-        threshold_metrics=[
-            {
-                "confidence_threshold": 0.1,
-                "true_positive_count": 7,
-                "false_positive_count": 3,
-                "false_negative_count": 3,
-                "precision": 0.7,
-                "recall": 0.7,
-                "f1": 0.7,
-                "f2": 0.7,
-            },
+        threshold_metrics=threshold_metrics
+        or [
+            threshold_row_for_test(0.1, 0.7, 0.7),
             selected_metrics,
         ],
     )
+
+
+def threshold_row_for_test(
+    confidence_threshold: float,
+    precision: float,
+    recall: float,
+) -> dict[str, float | int]:
+    """Build one threshold metrics row for report tests."""
+    return {
+        "confidence_threshold": confidence_threshold,
+        "true_positive_count": int(round(recall * 10)),
+        "false_positive_count": 3,
+        "false_negative_count": int(round((1 - recall) * 10)),
+        "precision": precision,
+        "recall": recall,
+        "f1": 0.0,
+        "f2": 0.0,
+    }
 
 
 def json_dumps(payload: dict) -> str:

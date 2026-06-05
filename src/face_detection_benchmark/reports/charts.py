@@ -10,6 +10,12 @@ from typing import Any
 
 from face_detection_benchmark.evaluation.types import ThresholdValidationResult
 
+PRIMARY_PRECISION_RECALL_MIN_RECALL = 0.60
+PRIMARY_PRECISION_RECALL_MIN_PRECISION = 0.60
+FALLBACK_PRECISION_RECALL_MIN_RECALL = 0.20
+FALLBACK_PRECISION_RECALL_MIN_PRECISION = 0.20
+MIN_VISIBLE_PRECISION_RECALL_POINTS = 2
+
 
 @dataclass(frozen=True)
 class ChartSeries:
@@ -224,17 +230,12 @@ def _precision_recall_series(
         round(float(result.selected_metrics["recall"]), 6),
         round(float(result.selected_metrics["precision"]), 6),
     )
-    visible_groups = [
-        group
-        for group in precision_recall_groups
-        if (
-            float(group["point"][0]) >= min_recall
-            and float(group["point"][1]) >= min_precision
-        )
-        or group["point"] == selected_point
-    ]
-    if not visible_groups:
-        visible_groups = precision_recall_groups
+    visible_groups = _visible_precision_recall_groups(
+        precision_recall_groups=precision_recall_groups,
+        selected_point=selected_point,
+        min_recall=min_recall,
+        min_precision=min_precision,
+    )
     return ChartSeries(
         label=label,
         points=[group["point"] for group in visible_groups],
@@ -244,6 +245,59 @@ def _precision_recall_series(
         show_point_labels=show_point_labels,
         label_callouts=label_callouts,
     )
+
+
+def _visible_precision_recall_groups(
+    precision_recall_groups: list[dict[str, Any]],
+    selected_point: tuple[float, float],
+    min_recall: float,
+    min_precision: float,
+) -> list[dict[str, Any]]:
+    """Choose visible precision-recall points with adaptive lower-bound fallback."""
+    primary_groups = _filter_precision_recall_groups(
+        precision_recall_groups=precision_recall_groups,
+        selected_point=selected_point,
+        min_recall=min_recall,
+        min_precision=min_precision,
+    )
+    if len(primary_groups) >= MIN_VISIBLE_PRECISION_RECALL_POINTS:
+        return primary_groups
+
+    fallback_groups = _filter_precision_recall_groups(
+        precision_recall_groups=precision_recall_groups,
+        selected_point=selected_point,
+        min_recall=FALLBACK_PRECISION_RECALL_MIN_RECALL,
+        min_precision=FALLBACK_PRECISION_RECALL_MIN_PRECISION,
+    )
+    if len(fallback_groups) >= MIN_VISIBLE_PRECISION_RECALL_POINTS:
+        return fallback_groups
+
+    nonzero_groups = [
+        group
+        for group in precision_recall_groups
+        if group["point"] == selected_point
+        or float(group["point"][0]) > 0.0
+        or float(group["point"][1]) > 0.0
+    ]
+    return nonzero_groups or precision_recall_groups
+
+
+def _filter_precision_recall_groups(
+    precision_recall_groups: list[dict[str, Any]],
+    selected_point: tuple[float, float],
+    min_recall: float,
+    min_precision: float,
+) -> list[dict[str, Any]]:
+    """Filter precision-recall points, always preserving the selected point."""
+    return [
+        group
+        for group in precision_recall_groups
+        if (
+            float(group["point"][0]) >= min_recall
+            and float(group["point"][1]) >= min_precision
+        )
+        or group["point"] == selected_point
+    ]
 
 
 def _group_threshold_rows_by_precision_recall(
@@ -434,8 +488,8 @@ def write_precision_recall_svg(
     """Write a precision-recall SVG chart for threshold validation results."""
     precision_recall_series = _precision_recall_series(
         result=result,
-        min_recall=0.60,
-        min_precision=0.60,
+        min_recall=PRIMARY_PRECISION_RECALL_MIN_RECALL,
+        min_precision=PRIMARY_PRECISION_RECALL_MIN_PRECISION,
     )
     selected_point = (
         float(result.selected_metrics["recall"]),
@@ -529,8 +583,8 @@ def write_precision_recall_overlay_svg(
     series = [
         _precision_recall_series(
             result=result,
-            min_recall=0.60,
-            min_precision=0.60,
+            min_recall=PRIMARY_PRECISION_RECALL_MIN_RECALL,
+            min_precision=PRIMARY_PRECISION_RECALL_MIN_PRECISION,
             label=result.model_name,
             color=_model_color(index),
             show_point_labels=False,
