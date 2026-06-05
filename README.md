@@ -38,7 +38,7 @@ notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
 ```
 
-`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR workflow notebook. The CLI tools are the source of truth for the local pipeline; the notebook is a guided wrapper around those tools.
+`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR workflow notebook, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
 
 ## Dataset Policy
 
