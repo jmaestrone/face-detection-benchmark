@@ -18,6 +18,7 @@ from face_detection_benchmark.reports import (
     append_results_row,
     load_validation_runs,
     parse_validation_run_spec,
+    summarize_video_predictions,
     write_results_leaderboard,
     write_threshold_validation_reports,
     write_validation_comparison_reports,
@@ -253,6 +254,124 @@ class ReportWritersTest(unittest.TestCase):
                 ["model-a", "model-b"],
             )
 
+    def test_summarize_video_predictions_writes_per_video_outputs(self) -> None:
+        """Summarize extracted-frame predictions without video accuracy metrics."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            metadata_path = root / "metadata.jsonl"
+            predictions_path = root / "predictions.jsonl"
+            output_dir = root / "video-summaries"
+            write_jsonl(
+                metadata_path,
+                [
+                    {
+                        "file_name": "video-a_frame000000_0000000000ms.jpg",
+                        "output_path": "video-a_frame000000_0000000000ms.jpg",
+                        "source_video": "videos/video-a.mp4",
+                        "video_stem": "video-a",
+                        "frame_index": 0,
+                        "timestamp_seconds": 0.0,
+                        "width": 640,
+                        "height": 480,
+                        "source_fps": 30.0,
+                    },
+                    {
+                        "file_name": "video-a_frame000030_0000001000ms.jpg",
+                        "output_path": "video-a_frame000030_0000001000ms.jpg",
+                        "source_video": "videos/video-a.mp4",
+                        "video_stem": "video-a",
+                        "frame_index": 30,
+                        "timestamp_seconds": 1.0,
+                        "width": 640,
+                        "height": 480,
+                        "source_fps": 30.0,
+                    },
+                    {
+                        "file_name": "video-b_frame000000_0000000000ms.jpg",
+                        "output_path": "video-b_frame000000_0000000000ms.jpg",
+                        "source_video": "videos/video-b.mp4",
+                        "video_stem": "video-b",
+                        "frame_index": 0,
+                        "timestamp_seconds": 0.0,
+                        "width": 1280,
+                        "height": 720,
+                    },
+                ],
+            )
+            write_jsonl(
+                predictions_path,
+                [
+                    {
+                        "file_name": "video-a_frame000000_0000000000ms.jpg",
+                        "image_path": "frames/video-a_frame000000_0000000000ms.jpg",
+                        "width": 640,
+                        "height": 480,
+                        "model_name": "rfdetr-test",
+                        "detections": [
+                            {"confidence": 0.9, "bbox_xyxy": [1, 2, 3, 4]},
+                            {"confidence": 0.1, "bbox_xyxy": [5, 6, 7, 8]},
+                        ],
+                        "timing_ms": {"inference": 10.0},
+                    },
+                    {
+                        "file_name": "video-a_frame000030_0000001000ms.jpg",
+                        "image_path": "frames/video-a_frame000030_0000001000ms.jpg",
+                        "width": 640,
+                        "height": 480,
+                        "model_name": "rfdetr-test",
+                        "detections": [],
+                        "timing_ms": {"inference": 20.0},
+                    },
+                    {
+                        "file_name": "video-b_frame000000_0000000000ms.jpg",
+                        "image_path": "frames/video-b_frame000000_0000000000ms.jpg",
+                        "width": 1280,
+                        "height": 720,
+                        "model_name": "rfdetr-test",
+                        "detections": [{"confidence": 0.8, "bbox_xyxy": [1, 1, 2, 2]}],
+                    },
+                ],
+            )
+
+            report_paths = summarize_video_predictions(
+                predictions_path=predictions_path,
+                metadata_path=metadata_path,
+                output_dir=output_dir,
+                confidence_threshold=0.25,
+            )
+
+            aggregate = json.loads(
+                report_paths["summary_json_path"].read_text(encoding="utf-8")
+            )
+            video_a = json.loads(
+                (output_dir / "video-a" / "summary.json").read_text(encoding="utf-8")
+            )
+            video_b = json.loads(
+                (output_dir / "video-b" / "summary.json").read_text(encoding="utf-8")
+            )
+            csv_text = report_paths["summary_csv_path"].read_text(encoding="utf-8")
+
+            self.assertEqual(aggregate["video_count"], 2)
+            self.assertEqual(aggregate["processed_frame_count"], 3)
+            self.assertEqual(aggregate["total_detections"], 2)
+            self.assertNotIn("precision", aggregate)
+            self.assertNotIn("recall", aggregate)
+            self.assertNotIn("map_50_95", aggregate)
+            self.assertEqual(video_a["source_video"], "videos/video-a.mp4")
+            self.assertEqual(video_a["video_stem"], "video-a")
+            self.assertEqual(video_a["processed_frame_count"], 2)
+            self.assertEqual(video_a["frames_with_faces"], 1)
+            self.assertEqual(video_a["total_detections"], 1)
+            self.assertEqual(video_a["timestamps_with_faces"], [0.0])
+            self.assertEqual(video_a["sampled_fps"], 1.0)
+            self.assertEqual(video_a["source_fps"], 30.0)
+            self.assertEqual(video_a["latency"]["total_ms"], 30.0)
+            self.assertEqual(video_a["latency"]["processed_fps"], 66.6667)
+            self.assertEqual(video_b["frames_with_faces"], 1)
+            self.assertIsNone(video_b["sampled_fps"])
+            self.assertIn("video-a", csv_text)
+            self.assertIn("processed_fps", csv_text)
+
     def test_write_validation_comparison_reports_uses_display_labels(self) -> None:
         """Write labeled comparison outputs without long model names in plot labels."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -455,6 +574,14 @@ def threshold_row_for_test(
         "f1": 0.0,
         "f2": 0.0,
     }
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    """Write newline-delimited JSON fixture rows."""
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
 
 
 def json_dumps(payload: dict) -> str:
