@@ -22,6 +22,7 @@ __pycache__/
 /data/predictions/
 /data/roboflow-export/
 /data/benchmark/
+/data/training/
 /runs/
 
 # Archives and generated media

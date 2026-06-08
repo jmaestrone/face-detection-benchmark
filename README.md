@@ -34,8 +34,11 @@ data/frames/              # extracted image frames, ignored
 data/predictions/         # raw RF-DETR detections, ignored
 data/roboflow-export/     # COCO dataset export, ignored
 data/benchmark/           # downloaded benchmark datasets, ignored
+data/training/            # training datasets, ignored
+data/training/rfdetr/     # RF-DETR training datasets, ignored
 notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
+runs/training/            # training outputs and checkpoints, ignored
 ```
 
 `notebooks/rfdetr_workflow.ipynb` is the local RF-DETR workflow notebook, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
@@ -43,6 +46,15 @@ runs/                     # previews, logs, and experiments, ignored
 ## Dataset Policy
 
 The cleaned Roboflow dataset created from these target videos is a test-only benchmark. Keep all uploaded images in the Roboflow `test` split, use no augmentations for the benchmark version, and do not train, fine-tune, or tune thresholds on this dataset.
+
+Benchmark data and training data must stay separate:
+
+- `data/benchmark/` is for downloaded benchmark or validation datasets only.
+- `data/training/` is for model training datasets only.
+- `data/training/rfdetr/` is the default local root for RF-DETR training datasets.
+- `runs/training/` is the default local root for RF-DETR training outputs, metadata, and checkpoints.
+
+Do not use `data/benchmark/target-video-test-3fps-clean/` for RF-DETR training, fine-tuning, augmentation experiments, or threshold tuning if the dataset is being treated as test data. RF-DETR training support must require an explicit training dataset directory and must refuse paths under `data/benchmark/`.
 
 ## Benchmark Dataset Download
 
