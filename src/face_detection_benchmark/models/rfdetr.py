@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import importlib.metadata
+import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from face_detection_benchmark.config import FACE_CATEGORY_NAME
+from face_detection_benchmark.config import (
+    DEFAULT_BENCHMARK_DATA_DIR,
+    FACE_CATEGORY_NAME,
+)
 from face_detection_benchmark.predictions import DetectionRecord, xyxy_to_xywh
+
+RFDETR_DATASET_FILES = ("roboflow", "coco", "yolo", "o365")
 
 
 @dataclass(frozen=True)
@@ -98,3 +106,136 @@ def _optional_int(values: Any, index: int) -> int | None:
     if values is None:
         return None
     return int(values[index])
+
+
+@dataclass(frozen=True)
+class RfdetrTrainingConfig:
+    """Configuration used to train an RF-DETR model."""
+
+    dataset_dir: Path
+    output_dir: Path
+    epochs: int
+    batch_size: int
+    device: str
+    dataset_file: str = "roboflow"
+    num_workers: int = 2
+    weights_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class RfdetrTrainingResult:
+    """Paths written by an RF-DETR training run."""
+
+    output_dir: Path
+    config_path: Path
+    metadata_path: Path
+
+
+def train_rfdetr(config: RfdetrTrainingConfig) -> RfdetrTrainingResult:
+    """Train RF-DETR with validated local dataset guardrails."""
+    _validate_training_config(config)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    config_path = config.output_dir / "config.json"
+    metadata_path = config.output_dir / "metadata.json"
+    started_at = datetime.now(timezone.utc).isoformat()
+    config_payload = _training_config_payload(config)
+    metadata_payload = {
+        "started_at": started_at,
+        "status": "started",
+        "package_versions": {"rfdetr": importlib.metadata.version("rfdetr")},
+    }
+    _write_json(config_path, config_payload)
+    _write_json(metadata_path, metadata_payload)
+
+    from rfdetr import RFDETRLarge
+
+    model_kwargs: dict[str, Any] = {}
+    if config.weights_path is not None:
+        model_kwargs["pretrain_weights"] = str(config.weights_path)
+    model = RFDETRLarge(**model_kwargs)
+    try:
+        model.train(
+            dataset_dir=str(config.dataset_dir),
+            output_dir=str(config.output_dir),
+            epochs=config.epochs,
+            batch_size=config.batch_size,
+            device=config.device,
+            dataset_file=config.dataset_file,
+            num_workers=config.num_workers,
+            notes=config_payload,
+        )
+    except ImportError as error:
+        raise ValueError(str(error)) from error
+
+    metadata_payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+    metadata_payload["status"] = "completed"
+    _write_json(metadata_path, metadata_payload)
+    return RfdetrTrainingResult(
+        output_dir=config.output_dir,
+        config_path=config_path,
+        metadata_path=metadata_path,
+    )
+
+
+def _validate_training_config(config: RfdetrTrainingConfig) -> None:
+    """Validate RF-DETR training options before loading the model."""
+    if _path_is_inside(config.dataset_dir, DEFAULT_BENCHMARK_DATA_DIR):
+        raise ValueError(
+            "--dataset-dir must not point inside data/benchmark; use data/training/ "
+            "for RF-DETR training datasets"
+        )
+    if not config.dataset_dir.exists():
+        raise ValueError(
+            f"Training dataset directory does not exist: {config.dataset_dir}"
+        )
+    if not config.dataset_dir.is_dir():
+        raise ValueError(
+            f"Training dataset path is not a directory: {config.dataset_dir}"
+        )
+    if config.weights_path is not None and not config.weights_path.exists():
+        raise ValueError(f"RF-DETR weights file does not exist: {config.weights_path}")
+    if config.epochs <= 0:
+        raise ValueError("--epochs must be greater than 0")
+    if config.batch_size <= 0:
+        raise ValueError("--batch-size must be greater than 0")
+    if config.num_workers < 0:
+        raise ValueError("--num-workers must be greater than or equal to 0")
+    if config.device not in {"auto", "mps", "cuda", "cpu"}:
+        raise ValueError("--device must be one of: auto, mps, cuda, cpu")
+    if config.dataset_file not in RFDETR_DATASET_FILES:
+        allowed = ", ".join(RFDETR_DATASET_FILES)
+        raise ValueError(f"--dataset-file must be one of: {allowed}")
+
+
+def _path_is_inside(candidate: Path, root: Path) -> bool:
+    """Return whether candidate points at or under root."""
+    resolved_candidate = candidate.resolve(strict=False)
+    resolved_root = root.resolve(strict=False)
+    return (
+        resolved_candidate == resolved_root
+        or resolved_root in resolved_candidate.parents
+    )
+
+
+def _training_config_payload(config: RfdetrTrainingConfig) -> dict[str, Any]:
+    """Return JSON-serializable RF-DETR training configuration."""
+    return {
+        "dataset_dir": config.dataset_dir.as_posix(),
+        "output_dir": config.output_dir.as_posix(),
+        "epochs": config.epochs,
+        "batch_size": config.batch_size,
+        "device": config.device,
+        "dataset_file": config.dataset_file,
+        "num_workers": config.num_workers,
+        "weights_path": config.weights_path.as_posix()
+        if config.weights_path is not None
+        else None,
+    }
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Write a deterministic JSON artifact."""
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )

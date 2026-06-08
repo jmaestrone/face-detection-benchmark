@@ -34,15 +34,88 @@ data/frames/              # extracted image frames, ignored
 data/predictions/         # raw RF-DETR detections, ignored
 data/roboflow-export/     # COCO dataset export, ignored
 data/benchmark/           # downloaded benchmark datasets, ignored
+data/training/            # training datasets, ignored
+data/training/rfdetr/     # RF-DETR training datasets, ignored
 notebooks/                # local notebooks and Colab references
 runs/                     # previews, logs, and experiments, ignored
+runs/training/            # training outputs and checkpoints, ignored
 ```
 
-`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR workflow notebook, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
+`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR labeling workflow notebook, `notebooks/rfdetr_training_workflow.ipynb` is the RF-DETR training wrapper, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
 
 ## Dataset Policy
 
 The cleaned Roboflow dataset created from these target videos is a test-only benchmark. Keep all uploaded images in the Roboflow `test` split, use no augmentations for the benchmark version, and do not train, fine-tune, or tune thresholds on this dataset.
+
+Benchmark data and training data must stay separate:
+
+- `data/benchmark/` is for downloaded benchmark or validation datasets only.
+- `data/training/` is for model training datasets only.
+- `data/training/rfdetr/` is the default local root for RF-DETR training datasets.
+- `runs/training/` is the default local root for RF-DETR training outputs, metadata, and checkpoints.
+
+Do not use `data/benchmark/target-video-test-3fps-clean/` for RF-DETR training, fine-tuning, augmentation experiments, or threshold tuning if the dataset is being treated as test data. RF-DETR training support must require an explicit training dataset directory and must refuse paths under `data/benchmark/`.
+
+## RF-DETR Training
+
+RF-DETR training uses the CLI as the source of truth. Keep training datasets under `data/training/`, keep training outputs under `runs/training/`, and never point the training command at `data/benchmark/`.
+
+The installed RF-DETR package exposes training through `RFDETRLarge.train(...)`. Training dependencies are optional in RF-DETR and may not be present in a default local environment. If a training run reports missing RF-DETR training dependencies, install the RF-DETR train extras in the local environment before running a real training job.
+
+Run training from an explicit training dataset directory:
+
+```bash
+uv run face-benchmark train-rfdetr \
+  --dataset-dir data/training/rfdetr \
+  --output-dir runs/training/<run-id> \
+  --epochs 100 \
+  --batch-size 4 \
+  --device auto
+```
+
+By default the command uses RF-DETR's `roboflow` dataset format. Use `--dataset-file coco`, `--dataset-file yolo`, or `--dataset-file o365` only when the training dataset matches that RF-DETR format. Use `--weights models/<checkpoint>.pth` when fine-tuning from a local checkpoint.
+
+The command writes reproducibility artifacts before training starts:
+
+```text
+runs/training/<run-id>/config.json
+runs/training/<run-id>/metadata.json
+```
+
+RF-DETR writes its own training outputs and checkpoints under the same output directory.
+
+## Trained RF-DETR Checkpoint Evaluation
+
+After training finishes, evaluate a trained checkpoint through the same benchmark prediction and validation commands used for any RF-DETR model. Keep the training run under `runs/training/`, then choose the checkpoint file from that run directory, such as `checkpoint_best_ema.pth` or another `.pth` file written by RF-DETR.
+
+Generate low-threshold predictions from the trained checkpoint:
+
+```bash
+uv run face-benchmark predict-rfdetr-benchmark \
+  --weights runs/training/<training-run-id>/<checkpoint>.pth \
+  --run-id <model-validation-run-id> \
+  --model-name <model-name>
+```
+
+If the labeled split is being used as validation data, choose an operating threshold from those predictions:
+
+```bash
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/<model-validation-run-id>/predictions/<model-name>.jsonl \
+  --run-id <model-validation-run-id> \
+  --selection-metric f2
+```
+
+Compare the trained checkpoint against other validation runs:
+
+```bash
+uv run face-benchmark compare-validation-runs \
+  --run-id <comparison-run-id> \
+  --validation-run runs/validation/<model-validation-run-id> \
+  --validation-run runs/validation/<other-validation-run-id>
+```
+
+If `data/benchmark/target-video-test-3fps-clean/` is treated as the final test benchmark, do not use it to choose thresholds, pick checkpoints, compare augmentation experiments, or make training decisions. In that case, select the checkpoint and threshold on separate validation data first, then run `evaluate-detections` once on the test benchmark with the preselected threshold.
 
 ## Benchmark Dataset Download
 
