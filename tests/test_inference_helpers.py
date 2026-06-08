@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from face_detection_benchmark.cli import app
 from face_detection_benchmark.inference import (
     iter_batches,
     load_frame_image_batch,
@@ -27,6 +28,7 @@ from face_detection_benchmark.models.insightface import (
     detector_output_to_records,
     parse_providers,
 )
+from face_detection_benchmark.models.rfdetr import RfdetrTrainingConfig, train_rfdetr
 from face_detection_benchmark.predictions import (
     DetectionRecord,
     ImagePredictionRecord,
@@ -34,6 +36,7 @@ from face_detection_benchmark.predictions import (
     summarize_latency,
     write_latency_summary,
 )
+from typer.testing import CliRunner
 
 
 class InferenceHelpersTest(unittest.TestCase):
@@ -220,6 +223,106 @@ class InferenceHelpersTest(unittest.TestCase):
             self.assertEqual(len(csv_lines), 2)
             self.assertIn("model_name,backend,device", csv_lines[0])
             self.assertIn("rfdetr-test,rfdetr,cpu", csv_lines[1])
+
+    def test_train_rfdetr_rejects_benchmark_dataset_dir(self) -> None:
+        """Prevent benchmark datasets from being used as training inputs."""
+        with self.assertRaisesRegex(ValueError, "must not point inside data/benchmark"):
+            train_rfdetr(
+                RfdetrTrainingConfig(
+                    dataset_dir=Path("data/benchmark/target-video-test-3fps-clean"),
+                    output_dir=Path("runs/training/test"),
+                    epochs=1,
+                    batch_size=1,
+                    device="cpu",
+                )
+            )
+
+    def test_train_rfdetr_writes_reproducibility_artifacts(self) -> None:
+        """Write config and metadata before invoking the RF-DETR training API."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset_dir = root / "training-dataset"
+            output_dir = root / "training-output"
+            weights_path = root / "checkpoint.pth"
+            dataset_dir.mkdir()
+            weights_path.write_bytes(b"weights")
+
+            with patch("rfdetr.RFDETRLarge") as model_class:
+                result = train_rfdetr(
+                    RfdetrTrainingConfig(
+                        dataset_dir=dataset_dir,
+                        output_dir=output_dir,
+                        weights_path=weights_path,
+                        epochs=2,
+                        batch_size=3,
+                        device="cpu",
+                        dataset_file="roboflow",
+                        num_workers=0,
+                    )
+                )
+
+            self.assertEqual(result.output_dir, output_dir)
+            model_class.assert_called_once_with(pretrain_weights=str(weights_path))
+            model_class.return_value.train.assert_called_once()
+            train_kwargs = model_class.return_value.train.call_args.kwargs
+            self.assertEqual(train_kwargs["dataset_dir"], str(dataset_dir))
+            self.assertEqual(train_kwargs["output_dir"], str(output_dir))
+            self.assertEqual(train_kwargs["epochs"], 2)
+            self.assertEqual(train_kwargs["batch_size"], 3)
+            self.assertEqual(train_kwargs["device"], "cpu")
+            self.assertEqual(train_kwargs["dataset_file"], "roboflow")
+            self.assertEqual(train_kwargs["num_workers"], 0)
+            self.assertEqual(
+                train_kwargs["notes"]["weights_path"], weights_path.as_posix()
+            )
+
+            config_payload = json.loads(result.config_path.read_text(encoding="utf-8"))
+            metadata_payload = json.loads(
+                result.metadata_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(config_payload["dataset_dir"], dataset_dir.as_posix())
+            self.assertEqual(config_payload["output_dir"], output_dir.as_posix())
+            self.assertEqual(config_payload["epochs"], 2)
+            self.assertEqual(metadata_payload["status"], "completed")
+            self.assertIn("rfdetr", metadata_payload["package_versions"])
+
+    def test_train_rfdetr_cli_requires_explicit_dataset_dir(self) -> None:
+        """Require callers to supply a training dataset path."""
+        result = CliRunner().invoke(
+            app,
+            [
+                "train-rfdetr",
+                "--output-dir",
+                "runs/training/test",
+                "--epochs",
+                "1",
+            ],
+        )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("Missing option '--dataset-dir'", result.output)
+
+    def test_train_rfdetr_cli_rejects_benchmark_dataset_dir(self) -> None:
+        """Surface benchmark dataset guardrails through the CLI."""
+        result = CliRunner().invoke(
+            app,
+            [
+                "train-rfdetr",
+                "--dataset-dir",
+                "data/benchmark/target-video-test-3fps-clean",
+                "--output-dir",
+                "runs/training/test",
+                "--epochs",
+                "1",
+                "--batch-size",
+                "1",
+                "--device",
+                "cpu",
+            ],
+        )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("must not point inside data/benchmark", result.output)
 
 
 if __name__ == "__main__":

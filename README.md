@@ -56,6 +56,34 @@ Benchmark data and training data must stay separate:
 
 Do not use `data/benchmark/target-video-test-3fps-clean/` for RF-DETR training, fine-tuning, augmentation experiments, or threshold tuning if the dataset is being treated as test data. RF-DETR training support must require an explicit training dataset directory and must refuse paths under `data/benchmark/`.
 
+## RF-DETR Training
+
+RF-DETR training uses the CLI as the source of truth. Keep training datasets under `data/training/`, keep training outputs under `runs/training/`, and never point the training command at `data/benchmark/`.
+
+The installed RF-DETR package exposes training through `RFDETRLarge.train(...)`. Training dependencies are optional in RF-DETR and may not be present in a default local environment. If a training run reports missing RF-DETR training dependencies, install the RF-DETR train extras in the local environment before running a real training job.
+
+Run training from an explicit training dataset directory:
+
+```bash
+uv run face-benchmark train-rfdetr \
+  --dataset-dir data/training/rfdetr \
+  --output-dir runs/training/<run-id> \
+  --epochs 100 \
+  --batch-size 4 \
+  --device auto
+```
+
+By default the command uses RF-DETR's `roboflow` dataset format. Use `--dataset-file coco`, `--dataset-file yolo`, or `--dataset-file o365` only when the training dataset matches that RF-DETR format. Use `--weights models/<checkpoint>.pth` when fine-tuning from a local checkpoint.
+
+The command writes reproducibility artifacts before training starts:
+
+```text
+runs/training/<run-id>/config.json
+runs/training/<run-id>/metadata.json
+```
+
+RF-DETR writes its own training outputs and checkpoints under the same output directory.
+
 ## Benchmark Dataset Download
 
 The canonical cleaned target-domain benchmark should be downloaded from the private Roboflow project version. Keep workspace, project, and API-key values out of committed files.

@@ -20,12 +20,20 @@ from face_detection_benchmark.config import (
     DEFAULT_PREDICTIONS_PATH,
     DEFAULT_ROBOFLOW_TEST_SPLIT,
     DEFAULT_RUNS_DIR,
+    DEFAULT_TRAINING_RUNS_DIR,
 )
 from face_detection_benchmark.inference import (
     DEFAULT_VALIDATION_INFERENCE_THRESHOLD,
     predict_faces_from_coco_dataset,
     predict_faces_from_frames,
     rfdetr_model_name_from_weights,
+)
+from face_detection_benchmark.models.rfdetr import (
+    RFDETR_DATASET_FILES,
+    RfdetrTrainingConfig,
+)
+from face_detection_benchmark.models.rfdetr import (
+    train_rfdetr as train_rfdetr_model,
 )
 
 
@@ -280,3 +288,92 @@ def predict_rfdetr_benchmark(
         typer.echo(f"Preview images: {result.preview_count} in {result.preview_dir}")
     if result.latency_path is not None:
         typer.echo(f"Latency summary: {result.latency_path}")
+
+
+def train_rfdetr(
+    dataset_dir: Annotated[
+        Path,
+        typer.Option(
+            "--dataset-dir",
+            help=(
+                "RF-DETR training dataset root. Must be explicit and must not be "
+                "inside data/benchmark/."
+            ),
+        ),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help=(
+                "Training output directory. For example: "
+                f"{DEFAULT_TRAINING_RUNS_DIR}/<run-id>."
+            ),
+        ),
+    ],
+    weights: Annotated[
+        Path | None,
+        typer.Option(
+            "--weights",
+            help="Optional local RF-DETR checkpoint to use as pretraining weights.",
+        ),
+    ] = None,
+    epochs: Annotated[
+        int,
+        typer.Option(
+            "--epochs",
+            min=1,
+            help="Number of RF-DETR training epochs.",
+        ),
+    ] = 100,
+    batch_size: Annotated[
+        int,
+        typer.Option(
+            "--batch-size",
+            min=1,
+            help="RF-DETR training batch size.",
+        ),
+    ] = 4,
+    device: Annotated[
+        str,
+        typer.Option(
+            "--device",
+            help="Device to use: auto, mps, cuda, or cpu.",
+        ),
+    ] = "auto",
+    dataset_file: Annotated[
+        str,
+        typer.Option(
+            "--dataset-file",
+            help=f"RF-DETR dataset format: {', '.join(RFDETR_DATASET_FILES)}.",
+        ),
+    ] = "roboflow",
+    num_workers: Annotated[
+        int,
+        typer.Option(
+            "--num-workers",
+            min=0,
+            help="Number of RF-DETR training dataloader workers.",
+        ),
+    ] = 2,
+) -> None:
+    """Train RF-DETR on an explicit training dataset."""
+    try:
+        result = train_rfdetr_model(
+            RfdetrTrainingConfig(
+                dataset_dir=dataset_dir,
+                output_dir=output_dir,
+                epochs=epochs,
+                batch_size=batch_size,
+                device=device,
+                dataset_file=dataset_file,
+                num_workers=num_workers,
+                weights_path=weights,
+            )
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(f"RF-DETR training output: {result.output_dir}")
+    typer.echo(f"Config: {result.config_path}")
+    typer.echo(f"Metadata: {result.metadata_path}")
