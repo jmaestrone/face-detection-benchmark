@@ -84,6 +84,39 @@ runs/training/<run-id>/metadata.json
 
 RF-DETR writes its own training outputs and checkpoints under the same output directory.
 
+## Trained RF-DETR Checkpoint Evaluation
+
+After training finishes, evaluate a trained checkpoint through the same benchmark prediction and validation commands used for any RF-DETR model. Keep the training run under `runs/training/`, then choose the checkpoint file from that run directory, such as `checkpoint_best_ema.pth` or another `.pth` file written by RF-DETR.
+
+Generate low-threshold predictions from the trained checkpoint:
+
+```bash
+uv run face-benchmark predict-rfdetr-benchmark \
+  --weights runs/training/<training-run-id>/<checkpoint>.pth \
+  --run-id <model-validation-run-id> \
+  --model-name <model-name>
+```
+
+If the labeled split is being used as validation data, choose an operating threshold from those predictions:
+
+```bash
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/<model-validation-run-id>/predictions/<model-name>.jsonl \
+  --run-id <model-validation-run-id> \
+  --selection-metric f2
+```
+
+Compare the trained checkpoint against other validation runs:
+
+```bash
+uv run face-benchmark compare-validation-runs \
+  --run-id <comparison-run-id> \
+  --validation-run runs/validation/<model-validation-run-id> \
+  --validation-run runs/validation/<other-validation-run-id>
+```
+
+If `data/benchmark/target-video-test-3fps-clean/` is treated as the final test benchmark, do not use it to choose thresholds, pick checkpoints, compare augmentation experiments, or make training decisions. In that case, select the checkpoint and threshold on separate validation data first, then run `evaluate-detections` once on the test benchmark with the preselected threshold.
+
 ## Benchmark Dataset Download
 
 The canonical cleaned target-domain benchmark should be downloaded from the private Roboflow project version. Keep workspace, project, and API-key values out of committed files.
