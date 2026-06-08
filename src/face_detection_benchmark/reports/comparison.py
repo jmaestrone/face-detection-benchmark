@@ -18,16 +18,25 @@ THRESHOLD_VALIDATION_FILE_NAME = "threshold_validation.json"
 
 
 @dataclass(frozen=True)
+class ValidationRunSpec:
+    """A comparison input path with an optional display label."""
+
+    path: Path
+    display_label: str | None = None
+
+
+@dataclass(frozen=True)
 class ValidationRun:
     """One loaded threshold validation run and its source path."""
 
     run_id: str
     source_path: Path
     result: ThresholdValidationResult
+    display_label: str
 
 
 def write_validation_comparison_reports(
-    validation_run_paths: list[Path],
+    validation_run_paths: list[Path | ValidationRunSpec],
     output_dir: Path,
 ) -> dict[str, Path]:
     """Write summary tables and overlay plots for validation runs."""
@@ -42,11 +51,17 @@ def write_validation_comparison_reports(
     write_validation_comparison_csv(validation_runs, summary_csv_path)
     write_validation_comparison_markdown(validation_runs, summary_markdown_path)
     write_precision_recall_overlay_svg(
-        [validation_run.result for validation_run in validation_runs],
+        [
+            (validation_run.display_label, validation_run.result)
+            for validation_run in validation_runs
+        ],
         precision_recall_path,
     )
     write_f_scores_overlay_svg(
-        [validation_run.result for validation_run in validation_runs],
+        [
+            (validation_run.display_label, validation_run.result)
+            for validation_run in validation_runs
+        ],
         f_scores_path,
     )
     return {
@@ -57,7 +72,9 @@ def write_validation_comparison_reports(
     }
 
 
-def load_validation_runs(validation_run_paths: list[Path]) -> list[ValidationRun]:
+def load_validation_runs(
+    validation_run_paths: list[Path | ValidationRunSpec],
+) -> list[ValidationRun]:
     """Load threshold validation results from run directories or JSON paths."""
     if len(validation_run_paths) < 2:
         raise ValueError("At least two --validation-run values are required")
@@ -74,6 +91,20 @@ def load_validation_runs(validation_run_paths: list[Path]) -> list[ValidationRun
     return validation_runs
 
 
+def parse_validation_run_spec(value: str) -> ValidationRunSpec:
+    """Parse a validation run CLI value as either path or display-label=path."""
+    if "=" not in value:
+        return ValidationRunSpec(path=Path(value))
+
+    display_label, path_value = value.split("=", maxsplit=1)
+    display_label = display_label.strip()
+    if not display_label:
+        raise ValueError("Validation run display label cannot be empty")
+    if not path_value:
+        raise ValueError("Validation run path cannot be empty")
+    return ValidationRunSpec(path=Path(path_value), display_label=display_label)
+
+
 def write_validation_comparison_csv(
     validation_runs: list[ValidationRun],
     summary_csv_path: Path,
@@ -83,6 +114,7 @@ def write_validation_comparison_csv(
     with summary_csv_path.open("w", encoding="utf-8", newline="") as summary_file:
         fieldnames = [
             "rank",
+            "display_label",
             "run_id",
             "model_name",
             "selection_metric",
@@ -118,10 +150,9 @@ def write_validation_comparison_markdown(
         "",
         "Sorted by each run's selected metric value, then F2, then F1.",
         "",
-        "| Rank | Run | Model | Metric | Threshold | Precision | Recall | F1 | F2 | "
+        "| Rank | Label | Metric | Threshold | Precision | Recall | F1 | F2 | "
         "TP | FP | FN |",
-        "| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | "
-        "---: | ---: |",
+        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for rank, validation_run in enumerate(
         _rank_validation_runs(validation_runs),
@@ -133,8 +164,7 @@ def write_validation_comparison_markdown(
             + " | ".join(
                 [
                     str(rank),
-                    validation_run.run_id,
-                    validation_run.result.model_name,
+                    validation_run.display_label,
                     validation_run.result.selection_metric,
                     _format_float(validation_run.result.selected_threshold),
                     _format_float(selected_metrics["precision"]),
@@ -160,25 +190,36 @@ def write_validation_comparison_markdown(
     )
 
 
-def _load_validation_run(validation_run_path: Path) -> ValidationRun:
+def _load_validation_run(
+    validation_run_spec: Path | ValidationRunSpec,
+) -> ValidationRun:
+    if isinstance(validation_run_spec, ValidationRunSpec):
+        validation_run_path = validation_run_spec.path
+        display_label = validation_run_spec.display_label
+    else:
+        validation_run_path = validation_run_spec
+        display_label = None
+
     validation_path = _validation_json_path(validation_run_path)
     if not validation_path.exists():
         raise ValueError(f"Validation JSON does not exist: {validation_path}")
     payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    result = ThresholdValidationResult(
+        model_name=str(payload["model_name"]),
+        image_count=int(payload["image_count"]),
+        ground_truth_count=int(payload["ground_truth_count"]),
+        prediction_count=int(payload["prediction_count"]),
+        iou_threshold=float(payload["iou_threshold"]),
+        selection_metric=str(payload["selection_metric"]),
+        selected_threshold=float(payload["selected_threshold"]),
+        selected_metrics=dict(payload["selected_metrics"]),
+        threshold_metrics=list(payload["threshold_metrics"]),
+    )
     return ValidationRun(
         run_id=validation_path.parent.name,
         source_path=validation_path,
-        result=ThresholdValidationResult(
-            model_name=str(payload["model_name"]),
-            image_count=int(payload["image_count"]),
-            ground_truth_count=int(payload["ground_truth_count"]),
-            prediction_count=int(payload["prediction_count"]),
-            iou_threshold=float(payload["iou_threshold"]),
-            selection_metric=str(payload["selection_metric"]),
-            selected_threshold=float(payload["selected_threshold"]),
-            selected_metrics=dict(payload["selected_metrics"]),
-            threshold_metrics=list(payload["threshold_metrics"]),
-        ),
+        result=result,
+        display_label=display_label or result.model_name,
     )
 
 
@@ -211,6 +252,7 @@ def _validation_summary_row(
     selected_metrics = validation_run.result.selected_metrics
     return {
         "rank": rank,
+        "display_label": validation_run.display_label,
         "run_id": validation_run.run_id,
         "model_name": validation_run.result.model_name,
         "selection_metric": validation_run.result.selection_metric,

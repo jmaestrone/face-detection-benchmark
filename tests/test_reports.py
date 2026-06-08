@@ -14,7 +14,10 @@ from face_detection_benchmark.evaluation import (
 )
 from face_detection_benchmark.evaluation.types import ThresholdValidationResult
 from face_detection_benchmark.reports import (
+    ValidationRunSpec,
     append_results_row,
+    load_validation_runs,
+    parse_validation_run_spec,
     write_results_leaderboard,
     write_threshold_validation_reports,
     write_validation_comparison_reports,
@@ -189,6 +192,128 @@ class ReportWritersTest(unittest.TestCase):
             self.assertIn(
                 "F Scores by Threshold Comparison",
                 paths["f_scores_path"].read_text(encoding="utf-8"),
+            )
+
+    def test_parse_validation_run_spec_accepts_plain_path(self) -> None:
+        """Keep the old unlabeled --validation-run path form supported."""
+        validation_run_spec = parse_validation_run_spec("runs/validation/run-a")
+
+        self.assertEqual(validation_run_spec.path, Path("runs/validation/run-a"))
+        self.assertIsNone(validation_run_spec.display_label)
+
+    def test_parse_validation_run_spec_accepts_display_label(self) -> None:
+        """Parse comparison display labels from label=path values."""
+        validation_run_spec = parse_validation_run_spec(
+            "RF-DETR=runs/validation/rfdetr-validation",
+        )
+
+        self.assertEqual(
+            validation_run_spec.path,
+            Path("runs/validation/rfdetr-validation"),
+        )
+        self.assertEqual(validation_run_spec.display_label, "RF-DETR")
+
+    def test_load_validation_runs_falls_back_to_model_name_label(self) -> None:
+        """Use model_name as the display label for old path inputs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first_run = root / "first-run"
+            second_run = root / "second-run"
+            first_run.mkdir()
+            second_run.mkdir()
+            first_result = threshold_validation_result_for_test(
+                model_name="model-a",
+                selected_threshold=0.3,
+                precision=0.8,
+                recall=0.8,
+                f1=0.8,
+                f2=0.8,
+            )
+            second_result = threshold_validation_result_for_test(
+                model_name="model-b",
+                selected_threshold=0.2,
+                precision=0.9,
+                recall=0.75,
+                f1=0.82,
+                f2=0.78,
+            )
+            (first_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(first_result)),
+                encoding="utf-8",
+            )
+            (second_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(second_result)),
+                encoding="utf-8",
+            )
+
+            validation_runs = load_validation_runs([first_run, second_run])
+
+            self.assertEqual(
+                [validation_run.display_label for validation_run in validation_runs],
+                ["model-a", "model-b"],
+            )
+
+    def test_write_validation_comparison_reports_uses_display_labels(self) -> None:
+        """Write labeled comparison outputs without long model names in plot labels."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first_run = root / "first-run"
+            second_run = root / "second-run"
+            first_run.mkdir()
+            second_run.mkdir()
+            first_result = threshold_validation_result_for_test(
+                model_name="rfdetr-14-11-29",
+                selected_threshold=0.3,
+                precision=0.8,
+                recall=0.8,
+                f1=0.8,
+                f2=0.8,
+            )
+            second_result = threshold_validation_result_for_test(
+                model_name="insightface-buffalo-l-det1280-thr005",
+                selected_threshold=0.2,
+                precision=0.9,
+                recall=0.75,
+                f1=0.82,
+                f2=0.78,
+            )
+            (first_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(first_result)),
+                encoding="utf-8",
+            )
+            (second_run / "threshold_validation.json").write_text(
+                json_dumps(threshold_validation_to_json_dict(second_result)),
+                encoding="utf-8",
+            )
+
+            paths = write_validation_comparison_reports(
+                validation_run_paths=[
+                    ValidationRunSpec(path=first_run, display_label="RF-DETR"),
+                    ValidationRunSpec(path=second_run, display_label="InsightFace"),
+                ],
+                output_dir=root / "comparison",
+            )
+
+            summary_csv = paths["summary_csv_path"].read_text(encoding="utf-8")
+            summary_markdown = paths["summary_markdown_path"].read_text(
+                encoding="utf-8",
+            )
+            precision_recall_svg = paths["precision_recall_path"].read_text(
+                encoding="utf-8",
+            )
+            f_scores_svg = paths["f_scores_path"].read_text(encoding="utf-8")
+            self.assertIn("display_label,run_id,model_name", summary_csv)
+            self.assertIn("RF-DETR", summary_csv)
+            self.assertIn("InsightFace", summary_csv)
+            self.assertIn("| 1 | RF-DETR |", summary_markdown)
+            self.assertIn("| 2 | InsightFace |", summary_markdown)
+            self.assertIn(">RF-DETR</text>", precision_recall_svg)
+            self.assertIn(">InsightFace</text>", precision_recall_svg)
+            self.assertIn(">RF-DETR F1</text>", f_scores_svg)
+            self.assertIn(">RF-DETR F2</text>", f_scores_svg)
+            self.assertNotIn(
+                "insightface-buffalo-l-det1280-thr005",
+                precision_recall_svg,
             )
 
     def test_precision_recall_plot_falls_back_for_lower_metric_models(self) -> None:
