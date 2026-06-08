@@ -136,10 +136,11 @@ def train_rfdetr(config: RfdetrTrainingConfig) -> RfdetrTrainingResult:
     _validate_training_config(config)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
+    resolved_device = _resolve_training_device(config.device)
     config_path = config.output_dir / "config.json"
     metadata_path = config.output_dir / "metadata.json"
     started_at = datetime.now(timezone.utc).isoformat()
-    config_payload = _training_config_payload(config)
+    config_payload = _training_config_payload(config, resolved_device)
     metadata_payload = {
         "started_at": started_at,
         "status": "started",
@@ -160,7 +161,7 @@ def train_rfdetr(config: RfdetrTrainingConfig) -> RfdetrTrainingResult:
             output_dir=str(config.output_dir),
             epochs=config.epochs,
             batch_size=config.batch_size,
-            device=config.device,
+            device=resolved_device,
             dataset_file=config.dataset_file,
             num_workers=config.num_workers,
             notes=config_payload,
@@ -208,6 +209,20 @@ def _validate_training_config(config: RfdetrTrainingConfig) -> None:
         raise ValueError(f"--dataset-file must be one of: {allowed}")
 
 
+def _resolve_training_device(requested_device: str) -> str:
+    """Resolve the CLI auto device value to a torch device string."""
+    if requested_device != "auto":
+        return requested_device
+
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def _path_is_inside(candidate: Path, root: Path) -> bool:
     """Return whether candidate points at or under root."""
     resolved_candidate = candidate.resolve(strict=False)
@@ -218,7 +233,10 @@ def _path_is_inside(candidate: Path, root: Path) -> bool:
     )
 
 
-def _training_config_payload(config: RfdetrTrainingConfig) -> dict[str, Any]:
+def _training_config_payload(
+    config: RfdetrTrainingConfig,
+    resolved_device: str,
+) -> dict[str, Any]:
     """Return JSON-serializable RF-DETR training configuration."""
     return {
         "dataset_dir": config.dataset_dir.as_posix(),
@@ -226,6 +244,8 @@ def _training_config_payload(config: RfdetrTrainingConfig) -> dict[str, Any]:
         "epochs": config.epochs,
         "batch_size": config.batch_size,
         "device": config.device,
+        "requested_device": config.device,
+        "resolved_device": resolved_device,
         "dataset_file": config.dataset_file,
         "num_workers": config.num_workers,
         "weights_path": config.weights_path.as_posix()

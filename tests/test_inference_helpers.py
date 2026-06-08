@@ -286,6 +286,38 @@ class InferenceHelpersTest(unittest.TestCase):
             self.assertEqual(metadata_payload["status"], "completed")
             self.assertIn("rfdetr", metadata_payload["package_versions"])
 
+    def test_train_rfdetr_resolves_auto_device_before_training_api(self) -> None:
+        """Convert the CLI auto device value before calling RF-DETR training."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset_dir = root / "training-dataset"
+            output_dir = root / "training-output"
+            dataset_dir.mkdir()
+
+            with (
+                patch("torch.cuda.is_available", return_value=False),
+                patch("torch.backends.mps.is_available", return_value=False),
+                patch("rfdetr.RFDETRLarge") as model_class,
+            ):
+                result = train_rfdetr(
+                    RfdetrTrainingConfig(
+                        dataset_dir=dataset_dir,
+                        output_dir=output_dir,
+                        epochs=1,
+                        batch_size=1,
+                        device="auto",
+                        num_workers=0,
+                    )
+                )
+
+            train_kwargs = model_class.return_value.train.call_args.kwargs
+            self.assertEqual(train_kwargs["device"], "cpu")
+            self.assertEqual(train_kwargs["notes"]["requested_device"], "auto")
+            self.assertEqual(train_kwargs["notes"]["resolved_device"], "cpu")
+            config_payload = json.loads(result.config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config_payload["device"], "auto")
+            self.assertEqual(config_payload["resolved_device"], "cpu")
+
     def test_train_rfdetr_cli_requires_explicit_dataset_dir(self) -> None:
         """Require callers to supply a training dataset path."""
         result = CliRunner().invoke(
