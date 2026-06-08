@@ -41,7 +41,7 @@ runs/                     # previews, logs, and experiments, ignored
 runs/training/            # training outputs and checkpoints, ignored
 ```
 
-`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR workflow notebook, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
+`notebooks/rfdetr_workflow.ipynb` is the local RF-DETR labeling workflow notebook, `notebooks/rfdetr_training_workflow.ipynb` is the RF-DETR training wrapper, and `notebooks/insightface_workflow.ipynb` is the local InsightFace/SCRFD benchmark wrapper. The CLI tools are the source of truth for the local pipeline; notebooks are guided wrappers around those tools.
 
 ## Dataset Policy
 
