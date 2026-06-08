@@ -22,6 +22,7 @@ from face_detection_benchmark.evaluation import (
 )
 from face_detection_benchmark.reports import (
     parse_prediction_overlay_spec,
+    parse_validation_run_spec,
     write_evaluation_reports,
     write_threshold_validation_reports,
     write_validation_comparison_reports,
@@ -278,12 +279,13 @@ def validate_thresholds(
 
 def compare_validation_runs(
     validation_runs: Annotated[
-        list[Path] | None,
+        list[str] | None,
         typer.Option(
             "--validation-run",
             help=(
-                "Validation run directory or threshold_validation.json path. "
-                "Repeat this option for each model."
+                "Validation run as an optional display label and path, "
+                "for example RF-DETR=runs/validation/run-a. Plain paths are "
+                "still supported. Repeat this option for each model."
             ),
         ),
     ] = None,
@@ -308,7 +310,10 @@ def compare_validation_runs(
 ) -> None:
     """Compare multiple threshold validation runs on shared plots."""
     try:
-        resolved_validation_runs = validation_runs or []
+        resolved_validation_runs = [
+            parse_validation_run_spec(validation_run)
+            for validation_run in validation_runs or []
+        ]
         resolved_run_id = run_id or default_run_id()
         resolved_output_dir = output_dir or (
             DEFAULT_RUNS_DIR / "validation" / "comparisons" / resolved_run_id

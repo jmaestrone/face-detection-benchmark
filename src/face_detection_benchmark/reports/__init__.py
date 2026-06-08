@@ -18,7 +18,9 @@ from face_detection_benchmark.reports.charts import (
     write_precision_recall_svg,
 )
 from face_detection_benchmark.reports.comparison import (
+    ValidationRunSpec,
     load_validation_runs,
+    parse_validation_run_spec,
     write_validation_comparison_reports,
 )
 from face_detection_benchmark.reports.overlays import (
@@ -53,7 +55,9 @@ __all__ = [
     "write_threshold_metrics_csv",
     "write_threshold_metrics_markdown",
     "write_threshold_validation_reports",
+    "ValidationRunSpec",
     "load_validation_runs",
+    "parse_validation_run_spec",
     "write_validation_comparison_reports",
 ]
 
