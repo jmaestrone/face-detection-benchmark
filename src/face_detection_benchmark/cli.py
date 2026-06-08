@@ -21,7 +21,10 @@ from face_detection_benchmark.commands.rfdetr import (
     predict_rfdetr_benchmark,
     train_rfdetr,
 )
-from face_detection_benchmark.commands.video import extract_frames
+from face_detection_benchmark.commands.video import (
+    extract_frames,
+    summarize_video_predictions,
+)
 
 app = typer.Typer(
     help="Extract frames, run face detection models, and export benchmark datasets."
@@ -31,6 +34,7 @@ app = typer.Typer(
 def register_commands(typer_app: typer.Typer) -> None:
     """Register all command implementations on the Typer app."""
     typer_app.command()(extract_frames)
+    typer_app.command()(summarize_video_predictions)
     typer_app.command()(predict_faces)
     typer_app.command()(predict_rfdetr_benchmark)
     typer_app.command()(train_rfdetr)

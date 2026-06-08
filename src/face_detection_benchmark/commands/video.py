@@ -8,10 +8,18 @@ from typing import Annotated
 import typer
 
 from face_detection_benchmark.config import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_FRAME_FPS,
     DEFAULT_FRAMES_DIR,
+    DEFAULT_PREDICTIONS_PATH,
+    DEFAULT_RUNS_DIR,
     DEFAULT_VIDEO_DIR,
 )
+from face_detection_benchmark.commands.common import default_run_id
+from face_detection_benchmark.reports import (
+    summarize_video_predictions as write_video_prediction_summaries,
+)
+from face_detection_benchmark.video import METADATA_FILE_NAME
 from face_detection_benchmark.video import extract_video_frames
 
 
@@ -91,3 +99,66 @@ def extract_frames(
         f"to {result.output_dir}"
     )
     typer.echo(f"Metadata: {result.metadata_path}")
+
+
+def summarize_video_predictions(
+    predictions_path: Annotated[
+        Path,
+        typer.Option(
+            "--predictions-path",
+            help="Extracted-frame prediction JSONL to summarize.",
+        ),
+    ] = DEFAULT_PREDICTIONS_PATH,
+    metadata_path: Annotated[
+        Path,
+        typer.Option(
+            "--metadata-path",
+            help="Frame extraction metadata JSONL path.",
+        ),
+    ] = DEFAULT_FRAMES_DIR / METADATA_FILE_NAME,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help=(
+                "Video summary output directory. Defaults to "
+                "runs/video-summaries/<run-id>."
+            ),
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    confidence_threshold: Annotated[
+        float,
+        typer.Option(
+            "--confidence-threshold",
+            min=0.0,
+            max=1.0,
+            help="Only include detections at or above this confidence.",
+        ),
+    ] = DEFAULT_CONFIDENCE_THRESHOLD,
+) -> None:
+    """Summarize extracted-frame predictions by source video without accuracy claims."""
+    try:
+        resolved_run_id = run_id or default_run_id()
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "video-summaries" / resolved_run_id
+        )
+        report_paths = write_video_prediction_summaries(
+            predictions_path=predictions_path,
+            metadata_path=metadata_path,
+            output_dir=resolved_output_dir,
+            confidence_threshold=confidence_threshold,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(f"Video summaries: {resolved_output_dir}")
+    typer.echo(f"Summary JSON: {report_paths['summary_json_path']}")
+    typer.echo(f"Summary CSV: {report_paths['summary_csv_path']}")

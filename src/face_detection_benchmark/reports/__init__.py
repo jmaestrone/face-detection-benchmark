@@ -37,6 +37,9 @@ from face_detection_benchmark.reports.tables import (
     write_threshold_metrics_csv,
     write_threshold_metrics_markdown,
 )
+from face_detection_benchmark.reports.video_summaries import (
+    summarize_video_predictions,
+)
 
 __all__ = [
     "append_results_row",
@@ -50,6 +53,7 @@ __all__ = [
     "write_precision_recall_overlay_svg",
     "write_precision_recall_svg",
     "write_results_leaderboard",
+    "summarize_video_predictions",
     "write_summary_csv",
     "write_sweep_csv",
     "write_threshold_metrics_csv",
