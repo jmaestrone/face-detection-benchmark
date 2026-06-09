@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,9 +14,20 @@ from face_detection_benchmark.inference import (
     iter_batches,
     load_frame_image_batch,
     load_image_batch,
+    predict_egoblur_from_coco_dataset,
     predict_faces_from_coco_dataset,
     predict_faces_from_frames,
     rfdetr_model_name_from_weights,
+)
+from face_detection_benchmark.models.egoblur import (
+    DEFAULT_EGOBLUR_CAMERA_NAME,
+    DEFAULT_EGOBLUR_MODEL_NAME,
+    DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    DEFAULT_EGOBLUR_THRESHOLD,
+    EgoBlurConfig,
+    EgoBlurDetector,
+    egoblur_face_detections_to_records,
+    resolve_egoblur_device,
 )
 from face_detection_benchmark.models.insightface import (
     DEFAULT_INSIGHTFACE_CTX_ID,
@@ -127,6 +139,88 @@ class InferenceHelpersTest(unittest.TestCase):
                     )
                 )
 
+    def test_egoblur_face_detections_to_records(self) -> None:
+        """Normalize EgoBlur face boxes and scores into prediction records."""
+
+        @dataclass
+        class EgoBlurOutput:
+            face_bboxes: list[list[float]]
+            face_scores: list[float]
+            lp_bboxes: list[list[float]]
+
+        records = egoblur_face_detections_to_records(
+            EgoBlurOutput(
+                face_bboxes=[[1, 2, 11, 22], [3, 4, 5, 6]],
+                face_scores=[0.9876543, 0.1],
+                lp_bboxes=[[50, 50, 60, 60]],
+            )
+        )
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0].bbox_xyxy, [1.0, 2.0, 11.0, 22.0])
+        self.assertEqual(records[0].bbox_xywh, [1.0, 2.0, 10.0, 20.0])
+        self.assertEqual(records[0].confidence, 0.987654)
+        self.assertEqual(records[0].class_id, 0)
+        self.assertEqual(records[0].class_name, "Human face")
+        self.assertEqual(egoblur_face_detections_to_records(None), [])
+
+    def test_egoblur_missing_dependency_message(self) -> None:
+        """Explain how to install the optional EgoBlur dependency."""
+        real_import = __import__
+
+        def fake_import(name: str, *args: object, **kwargs: object) -> object:
+            if name.startswith("gen2"):
+                raise ImportError("missing egoblur")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            with self.assertRaisesRegex(ValueError, "uv sync --extra egoblur"):
+                EgoBlurDetector(
+                    EgoBlurConfig(
+                        face_model_path=Path("models/egoblur/ego_blur_face_gen2.jit"),
+                        camera_name=DEFAULT_EGOBLUR_CAMERA_NAME,
+                        threshold=DEFAULT_EGOBLUR_THRESHOLD,
+                        nms_iou_threshold=DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+                        device="cpu",
+                    )
+                )
+
+    def test_resolve_egoblur_device_rejects_mps(self) -> None:
+        """Keep EgoBlur v1 device support limited to CUDA and CPU."""
+        with self.assertRaisesRegex(ValueError, "auto, cuda, cpu"):
+            resolve_egoblur_device("mps")
+
+    def test_egoblur_benchmark_prediction_validates_inputs_before_loading_model(
+        self,
+    ) -> None:
+        """Reject missing EgoBlur benchmark inputs before loading the model."""
+        with self.assertRaisesRegex(ValueError, "Dataset directory does not exist"):
+            predict_egoblur_from_coco_dataset(
+                dataset_dir=Path("missing-dataset"),
+                face_model_path=Path("missing-model.jit"),
+            )
+
+    def test_egoblur_benchmark_cli_rejects_missing_weights(self) -> None:
+        """Surface missing EgoBlur weights through the CLI."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_dir = Path(temp_dir) / "dataset"
+            dataset_dir.mkdir()
+            result = CliRunner().invoke(
+                app,
+                [
+                    "predict-egoblur-benchmark",
+                    "--dataset-dir",
+                    str(dataset_dir),
+                    "--face-model-path",
+                    str(Path(temp_dir) / "missing.jit"),
+                    "--device",
+                    "cpu",
+                ],
+            )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("EgoBlur face model file does not exist", result.output)
+
     def test_prediction_json_includes_timing_and_model_metadata(self) -> None:
         """Serialize normalized prediction rows with latency and backend metadata."""
         record = ImagePredictionRecord(
@@ -223,6 +317,46 @@ class InferenceHelpersTest(unittest.TestCase):
             self.assertEqual(len(csv_lines), 2)
             self.assertIn("model_name,backend,device", csv_lines[0])
             self.assertIn("rfdetr-test,rfdetr,cpu", csv_lines[1])
+
+    def test_egoblur_prediction_json_includes_metadata(self) -> None:
+        """Serialize EgoBlur prediction rows with face-only metadata."""
+        record = ImagePredictionRecord(
+            file_name="image.jpg",
+            image_path="dataset/image.jpg",
+            width=100,
+            height=100,
+            detections=[
+                DetectionRecord(
+                    bbox_xyxy=[1.0, 2.0, 11.0, 22.0],
+                    bbox_xywh=[1.0, 2.0, 10.0, 20.0],
+                    confidence=0.9,
+                    class_id=0,
+                    class_name="Human face",
+                )
+            ],
+            model_name=DEFAULT_EGOBLUR_MODEL_NAME,
+            model_config={
+                "generation": "gen2",
+                "face_model_name": "ego_blur_face_gen2.jit",
+                "camera_name": "camera-rgb",
+                "threshold": 0.005,
+                "nms_iou_threshold": 0.5,
+                "device": "cpu",
+            },
+            threshold=0.005,
+            device="cpu",
+            backend="egoblur",
+            timing_ms={"inference": 12.3456},
+        )
+
+        payload = prediction_record_to_json(record)
+
+        self.assertEqual(payload["model_name"], DEFAULT_EGOBLUR_MODEL_NAME)
+        self.assertEqual(payload["backend"], "egoblur")
+        self.assertEqual(payload["model_config"]["generation"], "gen2")
+        self.assertEqual(payload["model_config"]["camera_name"], "camera-rgb")
+        self.assertEqual(payload["detections"][0]["class_name"], "Human face")
+        self.assertEqual(payload["detections"][0]["class_id"], 0)
 
     def test_train_rfdetr_rejects_benchmark_dataset_dir(self) -> None:
         """Prevent benchmark datasets from being used as training inputs."""

@@ -17,10 +17,23 @@ and InsightFace dependencies:
 uv sync --extra insightface
 ```
 
+EgoBlur prediction support is optional because it adds the EgoBlur package and
+its TorchScript runtime dependencies:
+
+```bash
+uv sync --extra egoblur
+```
+
 RF-DETR inference requires a local checkpoint. Put model files under `models/`; for example:
 
 ```text
 models/checkpoint_best_ema.pth
+```
+
+EgoBlur Gen2 face benchmark inference requires the downloaded face model under:
+
+```text
+models/egoblur/ego_blur_face_gen2.jit
 ```
 
 Large local artifacts are intentionally ignored by git.
@@ -30,6 +43,7 @@ Large local artifacts are intentionally ignored by git.
 ```text
 face-trimmed-videos/      # current source videos
 models/                   # local RF-DETR checkpoints, ignored
+models/egoblur/           # local EgoBlur TorchScript models, ignored
 data/frames/              # extracted image frames, ignored
 data/predictions/         # raw RF-DETR detections, ignored
 data/roboflow-export/     # COCO dataset export, ignored
@@ -306,6 +320,82 @@ uv run face-benchmark compare-validation-runs \
   --validation-run runs/validation/rfdetr-ema-2-validation \
   --validation-run runs/validation/insightface-buffalo-l-validation
 ```
+
+## EgoBlur Benchmark Prediction
+
+Install the optional EgoBlur dependencies before running EgoBlur predictions:
+
+```bash
+uv sync --extra egoblur
+```
+
+Download the EgoBlur Gen2 face model from the Project Aria EgoBlur release
+page and keep it as an ignored local artifact:
+
+```text
+models/egoblur/ego_blur_face_gen2.jit
+```
+
+The benchmark command runs EgoBlur as a detector adapter and writes normalized
+face-only JSONL. EgoBlur can also detect license plates, but license plates are
+not emitted into this face benchmark because the current COCO evaluation schema
+only evaluates `Human face` boxes.
+
+Generate low-threshold EgoBlur face predictions:
+
+```bash
+uv run face-benchmark predict-egoblur-benchmark \
+  --run-id egoblur-gen2-face-validation \
+  --threshold 0.005
+```
+
+By default this reads `data/benchmark/target-video-test-3fps-clean/test/` and
+writes normalized predictions to:
+
+```text
+runs/benchmarks/egoblur-gen2-face-validation/predictions/egoblur-gen2-face.jsonl
+```
+
+The command also writes latency artifacts beside the prediction output:
+
+```text
+runs/benchmarks/egoblur-gen2-face-validation/latency/egoblur-gen2-face.json
+runs/benchmarks/egoblur-gen2-face-validation/latency.csv
+```
+
+EgoBlur v1 device support is `auto`, `cuda`, or `cpu`. On macOS, EgoBlur runs
+on CPU and can be slow; use CUDA on Linux when available.
+
+Validate thresholds for EgoBlur with the same workflow as RF-DETR and
+InsightFace:
+
+```bash
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/egoblur-gen2-face-validation/predictions/egoblur-gen2-face.jsonl \
+  --run-id egoblur-gen2-face-validation \
+  --selection-metric f2
+```
+
+Compare EgoBlur against RF-DETR and InsightFace validation runs:
+
+```bash
+uv run face-benchmark compare-validation-runs \
+  --run-id face-model-comparison \
+  --validation-run RF-DETR=runs/validation/<rfdetr-run> \
+  --validation-run InsightFace=runs/validation/<insightface-run> \
+  --validation-run EgoBlur=runs/validation/egoblur-gen2-face-validation
+```
+
+Render prediction overlays with the selected EgoBlur threshold:
+
+```bash
+uv run face-benchmark render-prediction-overlays \
+  --run-id face-model-overlays \
+  --prediction-spec EgoBlur=runs/benchmarks/egoblur-gen2-face-validation/predictions/egoblur-gen2-face.jsonl:<selected-threshold>
+```
+
+Do not add an EgoBlur notebook until this CLI path is working; notebooks should
+remain guided wrappers around the CLI source of truth.
 
 ## RF-DETR Labeling Pipeline
 

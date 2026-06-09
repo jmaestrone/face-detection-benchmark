@@ -20,6 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+egoblur = [
+    "egoblur",
+]
 insightface = [
     "insightface",
     "onnxruntime",

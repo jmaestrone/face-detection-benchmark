@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from face_detection_benchmark.inference.egoblur_benchmark import (
+    predict_egoblur_from_coco_dataset,
+)
 from face_detection_benchmark.inference.images import (
     iter_batches,
     load_coco_image_batch,
@@ -30,6 +33,7 @@ __all__ = [
     "load_coco_image_batch",
     "load_frame_image_batch",
     "load_image_batch",
+    "predict_egoblur_from_coco_dataset",
     "predict_insightface_from_coco_dataset",
     "predict_faces_from_coco_dataset",
     "predict_faces_from_frames",
