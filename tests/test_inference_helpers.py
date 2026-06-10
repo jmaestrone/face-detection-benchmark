@@ -512,6 +512,96 @@ class InferenceHelpersTest(unittest.TestCase):
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("must not point inside data/benchmark", result.output)
 
+    def test_report_rfdetr_training_cli_help_and_smoke(self) -> None:
+        """Expose and run the RF-DETR training report command."""
+        help_result = CliRunner().invoke(app, ["report-rfdetr-training", "--help"])
+        self.assertEqual(help_result.exit_code, 0)
+        self.assertIn("--metrics-csv", help_result.output)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            metrics_path = root / "metrics.csv"
+            metrics_path.write_text(
+                "\n".join(
+                    [
+                        "epoch,step,train/loss,train/lr,val/precision,val/recall,val/F1",
+                        "0,1,,0.001,,,",
+                        "0,2,5.0,,,,",
+                        "0,2,,,0.8,0.9,0.8471",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            output_dir = root / "report"
+
+            result = CliRunner().invoke(
+                app,
+                [
+                    "report-rfdetr-training",
+                    "--metrics-csv",
+                    str(metrics_path),
+                    "--run-id",
+                    "run-a",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("RF-DETR training report", result.output)
+            self.assertTrue((output_dir / "metrics_clean.csv").exists())
+            self.assertTrue((output_dir / "metrics.md").exists())
+            self.assertTrue((output_dir / "summary.md").exists())
+
+    def test_compare_rfdetr_training_runs_cli_help_and_smoke(self) -> None:
+        """Expose and run the RF-DETR training comparison command."""
+        help_result = CliRunner().invoke(
+            app,
+            ["compare-rfdetr-training-runs", "--help"],
+        )
+        self.assertEqual(help_result.exit_code, 0)
+        self.assertIn("--training-run", help_result.output)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first_report = root / "first"
+            second_report = root / "second"
+            first_report.mkdir()
+            second_report.mkdir()
+            csv_header = (
+                "epoch,step,train/loss,val/precision,val/recall,val/F1,val/F2\n"
+            )
+            (first_report / "metrics_clean.csv").write_text(
+                csv_header + "0,1,5.0,0.8,0.8,0.8,0.8\n",
+                encoding="utf-8",
+            )
+            (second_report / "metrics_clean.csv").write_text(
+                csv_header + "0,1,4.0,0.8,0.9,0.8471,0.8780\n",
+                encoding="utf-8",
+            )
+            output_dir = root / "comparison"
+
+            result = CliRunner().invoke(
+                app,
+                [
+                    "compare-rfdetr-training-runs",
+                    "--training-run",
+                    f"EMA1={first_report}",
+                    "--training-run",
+                    str(second_report),
+                    "--output-dir",
+                    str(output_dir),
+                    "--run-id",
+                    "comparison",
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Compared 2 RF-DETR training runs", result.output)
+            self.assertTrue((output_dir / "summary.csv").exists())
+            self.assertTrue((output_dir / "validation_f2_overlay.svg").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

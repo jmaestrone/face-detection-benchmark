@@ -35,6 +35,11 @@ from face_detection_benchmark.models.rfdetr import (
 from face_detection_benchmark.models.rfdetr import (
     train_rfdetr as train_rfdetr_model,
 )
+from face_detection_benchmark.reports import (
+    parse_rfdetr_training_run_spec,
+    write_rfdetr_training_comparison_reports,
+    write_rfdetr_training_report,
+)
 
 
 def predict_faces(
@@ -377,3 +382,135 @@ def train_rfdetr(
     typer.echo(f"RF-DETR training output: {result.output_dir}")
     typer.echo(f"Config: {result.config_path}")
     typer.echo(f"Metadata: {result.metadata_path}")
+
+
+def report_rfdetr_training(
+    metrics_csv: Annotated[
+        Path,
+        typer.Option(
+            "--metrics-csv",
+            help="RF-DETR training metrics.csv path.",
+        ),
+    ],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help=(
+                "Training report output directory. Defaults to "
+                "runs/training-reports/<run-id>."
+            ),
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    selection_metric: Annotated[
+        str,
+        typer.Option(
+            "--selection-metric",
+            help=("Best-row metric: f2, f1, precision, recall, map50, or map50-95."),
+        ),
+    ] = "f2",
+) -> None:
+    """Generate RF-DETR training metrics reports from metrics.csv."""
+    try:
+        resolved_run_id = run_id or metrics_csv.parent.name
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "training-reports" / resolved_run_id
+        )
+        report_paths = write_rfdetr_training_report(
+            metrics_csv_path=metrics_csv,
+            output_dir=resolved_output_dir,
+            run_id=resolved_run_id,
+            selection_metric=selection_metric,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(f"RF-DETR training report: {resolved_output_dir}")
+    typer.echo(f"Clean metrics CSV: {report_paths['metrics_clean_path']}")
+    typer.echo(f"Metrics Markdown: {report_paths['metrics_markdown_path']}")
+    typer.echo(f"Summary Markdown: {report_paths['summary_path']}")
+    typer.echo(f"Loss plot: {report_paths['loss_path']}")
+    typer.echo(f"Validation score plot: {report_paths['score_path']}")
+    typer.echo(f"mAP plot: {report_paths['map_path']}")
+    if "learning_rate_path" in report_paths:
+        typer.echo(f"Learning-rate plot: {report_paths['learning_rate_path']}")
+
+
+def compare_rfdetr_training_runs(
+    training_runs: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--training-run",
+            help=(
+                "RF-DETR training report as optional display label and path, "
+                "for example EMA1=runs/training-reports/run-a. Plain paths are "
+                "also supported. Repeat this option for each run."
+            ),
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help=(
+                "Comparison output directory. Defaults to "
+                "runs/training-reports/comparisons/<run-id>."
+            ),
+        ),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id used when --output-dir is not supplied.",
+        ),
+    ] = None,
+    selection_metric: Annotated[
+        str,
+        typer.Option(
+            "--selection-metric",
+            help=(
+                "Comparison ranking metric: f2, f1, precision, recall, map50, "
+                "or map50-95."
+            ),
+        ),
+    ] = "f2",
+) -> None:
+    """Compare RF-DETR training reports on shared plots."""
+    try:
+        resolved_training_runs = [
+            parse_rfdetr_training_run_spec(training_run)
+            for training_run in training_runs or []
+        ]
+        resolved_run_id = run_id or default_run_id()
+        resolved_output_dir = output_dir or (
+            DEFAULT_RUNS_DIR / "training-reports" / "comparisons" / resolved_run_id
+        )
+        report_paths = write_rfdetr_training_comparison_reports(
+            training_run_specs=resolved_training_runs,
+            output_dir=resolved_output_dir,
+            selection_metric=selection_metric,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    typer.echo(
+        f"Compared {len(resolved_training_runs)} RF-DETR training runs in "
+        f"{resolved_output_dir}"
+    )
+    typer.echo(f"Summary CSV: {report_paths['summary_csv_path']}")
+    typer.echo(f"Summary Markdown: {report_paths['summary_markdown_path']}")
+    typer.echo(f"Validation F2 overlay: {report_paths['validation_f2_path']}")
+    typer.echo(f"mAP overlay: {report_paths['map_path']}")
+    typer.echo(f"Loss overlay: {report_paths['loss_path']}")
+    if "learning_rate_path" in report_paths:
+        typer.echo(f"Learning-rate overlay: {report_paths['learning_rate_path']}")

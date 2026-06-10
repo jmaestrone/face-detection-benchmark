@@ -18,8 +18,10 @@ from face_detection_benchmark.commands.evaluation import (
 )
 from face_detection_benchmark.commands.insightface import predict_insightface_benchmark
 from face_detection_benchmark.commands.rfdetr import (
+    compare_rfdetr_training_runs,
     predict_faces,
     predict_rfdetr_benchmark,
+    report_rfdetr_training,
     train_rfdetr,
 )
 from face_detection_benchmark.commands.video import (
@@ -39,6 +41,8 @@ def register_commands(typer_app: typer.Typer) -> None:
     typer_app.command()(predict_faces)
     typer_app.command()(predict_rfdetr_benchmark)
     typer_app.command()(train_rfdetr)
+    typer_app.command()(report_rfdetr_training)
+    typer_app.command()(compare_rfdetr_training_runs)
     typer_app.command()(predict_insightface_benchmark)
     typer_app.command()(predict_egoblur_benchmark)
     typer_app.command()(export_coco)
