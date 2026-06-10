@@ -23,6 +23,8 @@ from face_detection_benchmark.models.egoblur import (
     DEFAULT_EGOBLUR_FACE_MODEL_PATH,
     DEFAULT_EGOBLUR_MODEL_NAME,
     DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    DEFAULT_EGOBLUR_RESIZE_MAX,
+    DEFAULT_EGOBLUR_RESIZE_MIN,
     DEFAULT_EGOBLUR_THRESHOLD,
 )
 
@@ -94,6 +96,22 @@ def predict_egoblur_benchmark(
             help="EgoBlur NMS IoU threshold.",
         ),
     ] = DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    resize_min: Annotated[
+        int,
+        typer.Option(
+            "--resize-min",
+            min=1,
+            help="EgoBlur shortest-edge resize target before model inference.",
+        ),
+    ] = DEFAULT_EGOBLUR_RESIZE_MIN,
+    resize_max: Annotated[
+        int,
+        typer.Option(
+            "--resize-max",
+            min=1,
+            help="EgoBlur longest-edge resize cap before model inference.",
+        ),
+    ] = DEFAULT_EGOBLUR_RESIZE_MAX,
     batch_size: Annotated[
         int,
         typer.Option(
@@ -155,6 +173,8 @@ def predict_egoblur_benchmark(
             camera_name=camera_name,
             threshold=threshold,
             nms_iou_threshold=nms_iou_threshold,
+            resize_min=resize_min,
+            resize_max=resize_max,
             batch_size=batch_size,
             device=device,
             limit=limit,

@@ -349,6 +349,18 @@ uv run face-benchmark predict-egoblur-benchmark \
   --threshold 0.005
 ```
 
+By default the command uses EgoBlur Gen2's official resize settings,
+`--resize-min 1200 --resize-max 1200`. For diagnostic comparisons with older
+experiments, you can run a 704 resize variant:
+
+```bash
+uv run face-benchmark predict-egoblur-benchmark \
+  --run-id egoblur-gen2-face-resize704-validation \
+  --threshold 0.005 \
+  --resize-min 704 \
+  --resize-max 704
+```
+
 By default this reads `data/benchmark/target-video-test-3fps-clean/test/` and
 writes normalized predictions to:
 

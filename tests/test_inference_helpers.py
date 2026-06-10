@@ -23,6 +23,8 @@ from face_detection_benchmark.models.egoblur import (
     DEFAULT_EGOBLUR_CAMERA_NAME,
     DEFAULT_EGOBLUR_MODEL_NAME,
     DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    DEFAULT_EGOBLUR_RESIZE_MAX,
+    DEFAULT_EGOBLUR_RESIZE_MIN,
     DEFAULT_EGOBLUR_THRESHOLD,
     EgoBlurConfig,
     EgoBlurDetector,
@@ -182,6 +184,8 @@ class InferenceHelpersTest(unittest.TestCase):
                         threshold=DEFAULT_EGOBLUR_THRESHOLD,
                         nms_iou_threshold=DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
                         device="cpu",
+                        resize_min=DEFAULT_EGOBLUR_RESIZE_MIN,
+                        resize_max=DEFAULT_EGOBLUR_RESIZE_MAX,
                     )
                 )
 
@@ -220,6 +224,20 @@ class InferenceHelpersTest(unittest.TestCase):
 
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("EgoBlur face model file does not exist", result.output)
+
+    def test_egoblur_benchmark_cli_rejects_invalid_resize(self) -> None:
+        """Reject invalid EgoBlur resize values at the CLI boundary."""
+        result = CliRunner().invoke(
+            app,
+            [
+                "predict-egoblur-benchmark",
+                "--resize-min",
+                "0",
+            ],
+        )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("Invalid value for '--resize-min'", result.output)
 
     def test_prediction_json_includes_timing_and_model_metadata(self) -> None:
         """Serialize normalized prediction rows with latency and backend metadata."""
@@ -342,6 +360,8 @@ class InferenceHelpersTest(unittest.TestCase):
                 "threshold": 0.005,
                 "nms_iou_threshold": 0.5,
                 "device": "cpu",
+                "resize_min": 1200,
+                "resize_max": 1200,
             },
             threshold=0.005,
             device="cpu",
@@ -355,6 +375,8 @@ class InferenceHelpersTest(unittest.TestCase):
         self.assertEqual(payload["backend"], "egoblur")
         self.assertEqual(payload["model_config"]["generation"], "gen2")
         self.assertEqual(payload["model_config"]["camera_name"], "camera-rgb")
+        self.assertEqual(payload["model_config"]["resize_min"], 1200)
+        self.assertEqual(payload["model_config"]["resize_max"], 1200)
         self.assertEqual(payload["detections"][0]["class_name"], "Human face")
         self.assertEqual(payload["detections"][0]["class_id"], 0)
 

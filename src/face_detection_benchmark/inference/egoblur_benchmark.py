@@ -23,6 +23,8 @@ from face_detection_benchmark.models.egoblur import (
     DEFAULT_EGOBLUR_FACE_MODEL_PATH,
     DEFAULT_EGOBLUR_MODEL_NAME,
     DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    DEFAULT_EGOBLUR_RESIZE_MAX,
+    DEFAULT_EGOBLUR_RESIZE_MIN,
     DEFAULT_EGOBLUR_THRESHOLD,
     EGOBLUR_CAMERA_NAMES,
     EgoBlurConfig,
@@ -44,6 +46,8 @@ def _validate_egoblur_prediction_options(
     camera_name: str,
     threshold: float,
     nms_iou_threshold: float,
+    resize_min: int,
+    resize_max: int,
     batch_size: int,
     device: str,
     limit: int | None,
@@ -61,6 +65,10 @@ def _validate_egoblur_prediction_options(
         raise ValueError("--threshold must be between 0 and 1")
     if not 0 <= nms_iou_threshold <= 1:
         raise ValueError("--nms-iou-threshold must be between 0 and 1")
+    if resize_min <= 0:
+        raise ValueError("--resize-min must be greater than 0")
+    if resize_max <= 0:
+        raise ValueError("--resize-max must be greater than 0")
     if batch_size <= 0:
         raise ValueError("--batch-size must be greater than 0")
     if device not in {"auto", "cuda", "cpu"}:
@@ -81,6 +89,8 @@ def predict_egoblur_from_coco_dataset(
     camera_name: str = DEFAULT_EGOBLUR_CAMERA_NAME,
     threshold: float = DEFAULT_EGOBLUR_THRESHOLD,
     nms_iou_threshold: float = DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD,
+    resize_min: int = DEFAULT_EGOBLUR_RESIZE_MIN,
+    resize_max: int = DEFAULT_EGOBLUR_RESIZE_MAX,
     batch_size: int = 4,
     device: str = "auto",
     limit: int | None = None,
@@ -96,6 +106,8 @@ def predict_egoblur_from_coco_dataset(
         camera_name=camera_name,
         threshold=threshold,
         nms_iou_threshold=nms_iou_threshold,
+        resize_min=resize_min,
+        resize_max=resize_max,
         batch_size=batch_size,
         device=device,
         limit=limit,
@@ -114,6 +126,8 @@ def predict_egoblur_from_coco_dataset(
             threshold=threshold,
             nms_iou_threshold=nms_iou_threshold,
             device=resolved_device,
+            resize_min=resize_min,
+            resize_max=resize_max,
         )
     )
 

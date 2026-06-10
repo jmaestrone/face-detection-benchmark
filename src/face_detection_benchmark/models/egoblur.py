@@ -16,6 +16,8 @@ DEFAULT_EGOBLUR_CAMERA_NAME = "camera-rgb"
 DEFAULT_EGOBLUR_THRESHOLD = 0.005
 DEFAULT_EGOBLUR_NMS_IOU_THRESHOLD = 0.5
 DEFAULT_EGOBLUR_DEVICE = "auto"
+DEFAULT_EGOBLUR_RESIZE_MIN = 1200
+DEFAULT_EGOBLUR_RESIZE_MAX = 1200
 EGOBLUR_CAMERA_NAMES = (
     "slam-front-left",
     "slam-front-right",
@@ -34,6 +36,8 @@ class EgoBlurConfig:
     threshold: float
     nms_iou_threshold: float
     device: str
+    resize_min: int
+    resize_max: int
 
 
 class EgoBlurDetector:
@@ -82,6 +86,8 @@ class EgoBlurDetector:
             "threshold": self.config.threshold,
             "nms_iou_threshold": self.config.nms_iou_threshold,
             "device": self.config.device,
+            "resize_min": self.config.resize_min,
+            "resize_max": self.config.resize_max,
         }
 
     @property
@@ -93,7 +99,6 @@ class EgoBlurDetector:
     def _load_detector(self, config: EgoBlurConfig) -> Any:
         """Load the configured EgoBlur Gen2 detector implementation."""
         try:
-            from gen2.script.constants import RESIZE_MAX_GEN2, RESIZE_MIN_GEN2
             from gen2.script.predictor import ClassID, EgoblurDetector
         except ImportError as error:
             raise ValueError(
@@ -108,8 +113,8 @@ class EgoBlurDetector:
             score_threshold=config.threshold,
             nms_iou_threshold=config.nms_iou_threshold,
             resize_aug={
-                "min_size_test": RESIZE_MIN_GEN2,
-                "max_size_test": RESIZE_MAX_GEN2,
+                "min_size_test": config.resize_min,
+                "max_size_test": config.resize_max,
             },
         )
 
