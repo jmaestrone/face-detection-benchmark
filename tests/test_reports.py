@@ -16,10 +16,16 @@ from face_detection_benchmark.evaluation.types import ThresholdValidationResult
 from face_detection_benchmark.reports import (
     ValidationRunSpec,
     append_results_row,
+    load_rfdetr_training_runs,
     load_validation_runs,
+    parse_rfdetr_training_metrics,
+    parse_rfdetr_training_run_spec,
     parse_validation_run_spec,
+    select_best_rfdetr_training_row,
     summarize_video_predictions,
     write_results_leaderboard,
+    write_rfdetr_training_comparison_reports,
+    write_rfdetr_training_report,
     write_threshold_validation_reports,
     write_validation_comparison_reports,
 )
@@ -520,6 +526,144 @@ class ReportWritersTest(unittest.TestCase):
             self.assertIn("threshold=0.20", precision_recall_svg)
             self.assertIn("lower-metric-model t=0.35", precision_recall_svg)
 
+    def test_parse_rfdetr_training_metrics_merges_sparse_rows(self) -> None:
+        """Merge sparse RF-DETR train, validation, and LR rows by epoch/step."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            metrics_path = Path(temp_dir) / "metrics.csv"
+            write_rfdetr_metrics_fixture(metrics_path)
+
+            metrics = parse_rfdetr_training_metrics(metrics_path)
+
+            self.assertEqual(metrics.source_row_count, 5)
+            self.assertEqual(metrics.merged_row_count, 3)
+            self.assertIn("val/F2", metrics.columns)
+            first_validation_row = metrics.rows[1]
+            self.assertEqual(first_validation_row["epoch"], 0)
+            self.assertEqual(first_validation_row["step"], 20)
+            self.assertEqual(first_validation_row["train/loss"], 6.0)
+            self.assertEqual(first_validation_row["val/loss"], 4.0)
+            self.assertEqual(first_validation_row["train/lr"], 0.001)
+            self.assertNotIn("val/loss", metrics.rows[0])
+            self.assertAlmostEqual(first_validation_row["val/F2"], 0.7758620690)
+
+    def test_select_best_rfdetr_training_row_supports_metrics_and_ties(self) -> None:
+        """Select best RF-DETR row by F2, F1, mAP, and later-step tie breaks."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            metrics_path = Path(temp_dir) / "metrics.csv"
+            write_rfdetr_metrics_fixture(metrics_path)
+            metrics = parse_rfdetr_training_metrics(metrics_path)
+
+            best_f2, metric_name, column = select_best_rfdetr_training_row(metrics)
+            best_f1, _, _ = select_best_rfdetr_training_row(metrics, "f1")
+            best_map, _, _ = select_best_rfdetr_training_row(metrics, "map50-95")
+
+            self.assertEqual(metric_name, "f2")
+            self.assertEqual(column, "val/F2")
+            self.assertEqual(best_f2["step"], 30)
+            self.assertEqual(best_f1["step"], 30)
+            self.assertEqual(best_map["step"], 30)
+
+    def test_write_rfdetr_training_report_writes_files(self) -> None:
+        """Write single-run RF-DETR training reports and SVG charts."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            metrics_path = root / "metrics.csv"
+            write_rfdetr_metrics_fixture(metrics_path)
+
+            paths = write_rfdetr_training_report(
+                metrics_csv_path=metrics_path,
+                output_dir=root / "report",
+                run_id="run-a",
+            )
+
+            self.assertTrue(paths["metrics_clean_path"].exists())
+            summary = paths["summary_path"].read_text(encoding="utf-8")
+            self.assertIn("not benchmark accuracy reporting", summary)
+            self.assertIn("data/benchmark/target-video-test-3fps-clean/test", summary)
+            self.assertIn(
+                "val/F2",
+                paths["metrics_clean_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn("<svg", paths["loss_path"].read_text(encoding="utf-8"))
+            self.assertIn(
+                "RF-DETR Validation Precision",
+                paths["score_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn("learning_rate_path", paths)
+
+    def test_write_rfdetr_training_report_omits_lr_plot_without_lr(self) -> None:
+        """Only write learning-rate charts when RF-DETR LR columns exist."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            metrics_path = root / "metrics.csv"
+            metrics_path.write_text(
+                "\n".join(
+                    [
+                        "epoch,step,val/precision,val/recall,val/F1",
+                        "0,1,0.7,0.8,0.7467",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            paths = write_rfdetr_training_report(
+                metrics_csv_path=metrics_path,
+                output_dir=root / "report",
+                run_id="run-a",
+            )
+
+            self.assertNotIn("learning_rate_path", paths)
+
+    def test_parse_rfdetr_training_run_spec_accepts_plain_and_labeled(self) -> None:
+        """Parse RF-DETR training comparison labels from label=path values."""
+        plain = parse_rfdetr_training_run_spec("runs/training-reports/run-a")
+        labeled = parse_rfdetr_training_run_spec("EMA1=runs/training-reports/run-a")
+
+        self.assertEqual(plain.path, Path("runs/training-reports/run-a"))
+        self.assertIsNone(plain.display_label)
+        self.assertEqual(labeled.path, Path("runs/training-reports/run-a"))
+        self.assertEqual(labeled.display_label, "EMA1")
+
+    def test_write_rfdetr_training_comparison_reports_writes_outputs(self) -> None:
+        """Compare RF-DETR training reports and rank by validation F2."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first_metrics_path = root / "first_metrics.csv"
+            second_metrics_path = root / "second_metrics.csv"
+            write_rfdetr_metrics_fixture(first_metrics_path, second_recall=0.8)
+            write_rfdetr_metrics_fixture(second_metrics_path, second_recall=0.9)
+            first_report = root / "first"
+            second_report = root / "second"
+            write_rfdetr_training_report(first_metrics_path, first_report, "first")
+            write_rfdetr_training_report(second_metrics_path, second_report, "second")
+
+            paths = write_rfdetr_training_comparison_reports(
+                training_run_specs=[
+                    parse_rfdetr_training_run_spec(f"EMA1={first_report}"),
+                    second_report,
+                ],
+                output_dir=root / "comparison",
+            )
+
+            summary_csv = paths["summary_csv_path"].read_text(encoding="utf-8")
+            summary_markdown = paths["summary_markdown_path"].read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("second", summary_csv.splitlines()[1])
+            self.assertIn("EMA1", summary_csv)
+            self.assertIn("not benchmark accuracy reporting", summary_markdown)
+            self.assertIn(
+                "RF-DETR Validation F2 Comparison",
+                paths["validation_f2_path"].read_text(encoding="utf-8"),
+            )
+            self.assertIn("learning_rate_path", paths)
+
+    def test_load_rfdetr_training_runs_requires_two_runs(self) -> None:
+        """Require at least two RF-DETR training runs for comparison."""
+        with self.assertRaisesRegex(ValueError, "At least two"):
+            load_rfdetr_training_runs([Path("runs/training-reports/run-a")])
+
 
 def threshold_validation_result_for_test(
     model_name: str,
@@ -574,6 +718,44 @@ def threshold_row_for_test(
         "f1": 0.0,
         "f2": 0.0,
     }
+
+
+def write_rfdetr_metrics_fixture(path: Path, second_recall: float = 0.8) -> None:
+    """Write a sparse RF-DETR metrics.csv fixture."""
+    rows = [
+        [
+            "epoch",
+            "step",
+            "train/loss",
+            "train/lr",
+            "val/loss",
+            "val/precision",
+            "val/recall",
+            "val/F1",
+            "val/mAP_50",
+            "val/mAP_50_95",
+        ],
+        ["0", "10", "", "0.001", "", "", "", "", "", ""],
+        ["0", "20", "", "", "4.0", "0.9", "0.75", "0.8182", "0.7", "0.4"],
+        ["0", "20", "6.0", "0.001", "", "", "", "", "", ""],
+        [
+            "1",
+            "30",
+            "",
+            "",
+            "3.0",
+            "0.8",
+            str(second_recall),
+            "0.8182",
+            "0.8",
+            "0.5",
+        ],
+        ["1", "30", "5.0", "0.0005", "", "", "", "", "", ""],
+    ]
+    path.write_text(
+        "\n".join(",".join(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:

@@ -98,6 +98,87 @@ runs/training/<run-id>/metadata.json
 
 RF-DETR writes its own training outputs and checkpoints under the same output directory.
 
+## RF-DETR Training Metrics Reports
+
+RF-DETR training writes a sparse `metrics.csv` with training, validation, and
+learning-rate rows. Generate a local training telemetry report from that file:
+
+```bash
+uv run face-benchmark report-rfdetr-training \
+  --metrics-csv runs/training/<run-id>/metrics.csv \
+  --run-id <run-id>
+```
+
+By default this writes under:
+
+```text
+runs/training-reports/<run-id>/
+```
+
+The report includes:
+
+```text
+metrics_clean.csv
+summary.md
+training_validation_loss.svg
+validation_precision_recall_f1.svg
+map.svg
+learning_rate.svg
+```
+
+`metrics_clean.csv` merges RF-DETR's sparse rows by epoch and step, computes
+validation F2 from validation precision and recall, and keeps useful numeric
+training, validation, mAP, EMA mAP, and learning-rate columns. The default best
+epoch/step is selected by computed validation F2 because this project prioritizes
+finding faces. Use `--selection-metric f1`, `--selection-metric map50`,
+`--selection-metric map50-95`, `--selection-metric precision`, or
+`--selection-metric recall` to rank by another validation metric.
+
+Compare multiple RF-DETR training reports with display labels:
+
+```bash
+uv run face-benchmark compare-rfdetr-training-runs \
+  --training-run EMA1=runs/training-reports/run-a \
+  --training-run EMA2=runs/training-reports/run-b \
+  --run-id <comparison-run-id>
+```
+
+By default this writes under:
+
+```text
+runs/training-reports/comparisons/<comparison-run-id>/
+```
+
+Comparison artifacts include `summary.csv`, `summary.md`,
+`validation_f2_overlay.svg`, `map_overlay.svg`, `loss_overlay.svg`, and
+`learning_rate_overlay.svg` when learning-rate columns exist.
+
+These training reports are not benchmark accuracy reports. They answer how a
+training run evolved on RF-DETR's training and validation data. To measure a
+selected checkpoint on the cleaned face dataset, use the existing benchmark or
+validation workflow:
+
+```bash
+uv run face-benchmark predict-rfdetr-benchmark \
+  --weights runs/training/<training-run-id>/<checkpoint>.pth \
+  --run-id <validation-or-benchmark-run-id> \
+  --model-name <model-name>
+
+uv run face-benchmark validate-thresholds \
+  --predictions-path runs/benchmarks/<validation-or-benchmark-run-id>/predictions/<model-name>.jsonl \
+  --run-id <validation-or-benchmark-run-id>
+```
+
+Keep the artifact lanes separate:
+
+- `runs/training-reports/` is for RF-DETR training telemetry.
+- `runs/validation/` is for threshold or checkpoint validation analysis.
+- `runs/benchmarks/` is for final benchmark accuracy reporting.
+
+If `data/benchmark/target-video-test-3fps-clean/test/` is used for checkpoint
+or threshold selection, treat that output as validation analysis, not as an
+unbiased final test benchmark.
+
 ## Trained RF-DETR Checkpoint Evaluation
 
 After training finishes, evaluate a trained checkpoint through the same benchmark prediction and validation commands used for any RF-DETR model. Keep the training run under `runs/training/`, then choose the checkpoint file from that run directory, such as `checkpoint_best_ema.pth` or another `.pth` file written by RF-DETR.

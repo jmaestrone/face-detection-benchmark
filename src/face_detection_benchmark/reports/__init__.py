@@ -29,6 +29,15 @@ from face_detection_benchmark.reports.overlays import (
     parse_prediction_overlay_spec,
     render_prediction_overlays,
 )
+from face_detection_benchmark.reports.rfdetr_training import (
+    RfdetrTrainingRunSpec,
+    load_rfdetr_training_runs,
+    parse_rfdetr_training_metrics,
+    parse_rfdetr_training_run_spec,
+    select_best_rfdetr_training_row,
+    write_rfdetr_training_comparison_reports,
+    write_rfdetr_training_report,
+)
 from face_detection_benchmark.reports.tables import (
     append_results_row,
     write_results_leaderboard,
@@ -63,6 +72,13 @@ __all__ = [
     "load_validation_runs",
     "parse_validation_run_spec",
     "write_validation_comparison_reports",
+    "RfdetrTrainingRunSpec",
+    "load_rfdetr_training_runs",
+    "parse_rfdetr_training_metrics",
+    "parse_rfdetr_training_run_spec",
+    "select_best_rfdetr_training_row",
+    "write_rfdetr_training_comparison_reports",
+    "write_rfdetr_training_report",
 ]
 
 
