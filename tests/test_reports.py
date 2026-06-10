@@ -577,9 +577,15 @@ class ReportWritersTest(unittest.TestCase):
             )
 
             self.assertTrue(paths["metrics_clean_path"].exists())
+            self.assertTrue(paths["metrics_markdown_path"].exists())
             summary = paths["summary_path"].read_text(encoding="utf-8")
+            metrics_markdown = paths["metrics_markdown_path"].read_text(
+                encoding="utf-8"
+            )
             self.assertIn("not benchmark accuracy reporting", summary)
             self.assertIn("data/benchmark/target-video-test-3fps-clean/test", summary)
+            self.assertIn("# RF-DETR Training Metrics", metrics_markdown)
+            self.assertIn("`val/F2`", metrics_markdown)
             self.assertIn(
                 "val/F2",
                 paths["metrics_clean_path"].read_text(encoding="utf-8"),

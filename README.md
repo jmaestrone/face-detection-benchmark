@@ -119,6 +119,7 @@ The report includes:
 
 ```text
 metrics_clean.csv
+metrics.md
 summary.md
 training_validation_loss.svg
 validation_precision_recall_f1.svg
@@ -126,13 +127,15 @@ map.svg
 learning_rate.svg
 ```
 
-`metrics_clean.csv` merges RF-DETR's sparse rows by epoch and step, computes
-validation F2 from validation precision and recall, and keeps useful numeric
-training, validation, mAP, EMA mAP, and learning-rate columns. The default best
-epoch/step is selected by computed validation F2 because this project prioritizes
-finding faces. Use `--selection-metric f1`, `--selection-metric map50`,
-`--selection-metric map50-95`, `--selection-metric precision`, or
-`--selection-metric recall` to rank by another validation metric.
+`metrics_clean.csv` merges RF-DETR's sparse rows by epoch and step, while
+`metrics.md` writes the same cleaned rows as a human-readable Markdown table.
+Both compute validation F2 from validation precision and recall, and keep useful
+numeric training, validation, mAP, EMA mAP, and learning-rate columns. The
+default best epoch/step is selected by computed validation F2 because this
+project prioritizes finding faces. Use `--selection-metric f1`,
+`--selection-metric map50`, `--selection-metric map50-95`,
+`--selection-metric precision`, or `--selection-metric recall` to rank by another
+validation metric.
 
 Compare multiple RF-DETR training reports with display labels:
 

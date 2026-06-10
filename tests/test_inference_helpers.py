@@ -551,6 +551,7 @@ class InferenceHelpersTest(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertIn("RF-DETR training report", result.output)
             self.assertTrue((output_dir / "metrics_clean.csv").exists())
+            self.assertTrue((output_dir / "metrics.md").exists())
             self.assertTrue((output_dir / "summary.md").exists())
 
     def test_compare_rfdetr_training_runs_cli_help_and_smoke(self) -> None:

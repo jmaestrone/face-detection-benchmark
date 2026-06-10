@@ -435,6 +435,7 @@ def report_rfdetr_training(
 
     typer.echo(f"RF-DETR training report: {resolved_output_dir}")
     typer.echo(f"Clean metrics CSV: {report_paths['metrics_clean_path']}")
+    typer.echo(f"Metrics Markdown: {report_paths['metrics_markdown_path']}")
     typer.echo(f"Summary Markdown: {report_paths['summary_path']}")
     typer.echo(f"Loss plot: {report_paths['loss_path']}")
     typer.echo(f"Validation score plot: {report_paths['score_path']}")
