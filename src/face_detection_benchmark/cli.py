@@ -9,6 +9,7 @@ from face_detection_benchmark.commands.datasets import (
     export_coco,
     upload_roboflow,
 )
+from face_detection_benchmark.commands.egoblur import predict_egoblur_benchmark
 from face_detection_benchmark.commands.evaluation import (
     compare_validation_runs,
     evaluate_detections,
@@ -39,6 +40,7 @@ def register_commands(typer_app: typer.Typer) -> None:
     typer_app.command()(predict_rfdetr_benchmark)
     typer_app.command()(train_rfdetr)
     typer_app.command()(predict_insightface_benchmark)
+    typer_app.command()(predict_egoblur_benchmark)
     typer_app.command()(export_coco)
     typer_app.command()(download_roboflow_benchmark)
     typer_app.command()(evaluate_detections)
